@@ -987,3 +987,307 @@ def _get_player_grouped_stats(qs, sort_by, order, limit):
             'favorite_pattern': favorite_map.get(uid, ''),
         })
     return result
+
+
+RARITY_DESCRIPTIONS = {
+    1: '极其常见',
+    2: '非常常见',
+    3: '比较常见',
+    4: '普通',
+    5: '略稀有',
+    6: '较稀有',
+    7: '稀有',
+    8: '非常稀有',
+    9: '极其稀有',
+    10: '传说级',
+}
+
+
+def _get_rarity_description(score):
+    return RARITY_DESCRIPTIONS.get(score, '普通')
+
+
+def _get_pattern_dict(pattern, hit_count=None, last_occurrence=None, highlight_count=None):
+    from django.db.models import Count, Max
+
+    if hit_count is None:
+        if hasattr(pattern, 'hit_count'):
+            hit_count = pattern.hit_count
+        else:
+            hit_count = pattern.game_occurrences.filter(
+                game_player__game__status='completed'
+            ).count()
+
+    if last_occurrence is None:
+        if hasattr(pattern, 'last_occurrence'):
+            last_occurrence = pattern.last_occurrence
+        else:
+            last_occurrence = pattern.game_occurrences.filter(
+                game_player__game__status='completed'
+            ).aggregate(
+                last=Max('game_player__game__game_time')
+            )['last']
+
+    if highlight_count is None:
+        if hasattr(pattern, 'highlight_count'):
+            highlight_count = pattern.highlight_count
+        else:
+            highlight_count = Highlight.objects.filter(
+                game__players__patterns__tile_pattern=pattern,
+                highlight_type='rare_pattern',
+            ).distinct().count()
+
+    return {
+        'id': pattern.pk,
+        'name': pattern.name,
+        'category': pattern.category,
+        'category_name': pattern.get_category_display(),
+        'fan_count': pattern.fan_count,
+        'description': pattern.description,
+        'rarity_score': pattern.rarity_score,
+        'rarity_description': _get_rarity_description(pattern.rarity_score),
+        'hit_count': hit_count or 0,
+        'last_occurrence': last_occurrence.isoformat() if last_occurrence else None,
+        'highlight_count': highlight_count or 0,
+        'is_active': pattern.is_active,
+    }
+
+
+def tile_pattern_list(request):
+    """牌型百科列表查询接口
+
+    支持按名称模糊检索、按类别浏览，返回牌型分类、番数、稀有度说明、
+    最近被打出时间和关联高光数量，适用于「牌型图鉴」、「录入页提示」等场景。
+
+    Query Parameters:
+        - search: 名称模糊搜索关键词
+        - category: 牌型分类 (special/color/honor/basic/combo/custom)
+        - min_fan: 最小番数
+        - max_fan: 最大番数
+        - min_rarity: 最小稀有度 (1-10)
+        - max_rarity: 最大稀有度 (1-10)
+        - is_active: 是否只返回启用的牌型 (1/0)，默认 1
+        - sort_by: 排序字段 (name/fan_count/rarity_score/hit_count/last_occurrence/highlight_count)，默认 rarity_score
+        - order: 排序方向 (asc/desc)，默认 desc
+        - page: 页码，默认 1
+        - page_size: 每页数量，默认 20，最大 100
+    """
+    from django.db.models import Count, Max, Q
+
+    search = request.GET.get('search', '')
+    category = request.GET.get('category', '')
+    min_fan_str = request.GET.get('min_fan', '')
+    max_fan_str = request.GET.get('max_fan', '')
+    min_rarity_str = request.GET.get('min_rarity', '')
+    max_rarity_str = request.GET.get('max_rarity', '')
+    is_active_str = request.GET.get('is_active', '1')
+    sort_by = request.GET.get('sort_by', 'rarity_score')
+    order = request.GET.get('order', 'desc')
+    page_str = request.GET.get('page', '1')
+    page_size_str = request.GET.get('page_size', '20')
+
+    warnings = []
+
+    qs = TilePattern.objects.all()
+
+    if search:
+        qs = qs.filter(Q(name__icontains=search) | Q(description__icontains=search))
+
+    if category:
+        valid_categories = [c[0] for c in TilePattern.CATEGORY_CHOICES]
+        if category in valid_categories:
+            qs = qs.filter(category=category)
+        else:
+            warnings.append(f'category 参数无效，有效值为 {", ".join(valid_categories)}，已忽略')
+
+    if min_fan_str:
+        try:
+            min_fan = int(min_fan_str)
+            if min_fan >= 1:
+                qs = qs.filter(fan_count__gte=min_fan)
+            else:
+                warnings.append('min_fan 不能小于 1，已忽略')
+        except (ValueError, TypeError):
+            warnings.append('min_fan 格式有误，应为正整数，已忽略')
+
+    if max_fan_str:
+        try:
+            max_fan = int(max_fan_str)
+            if max_fan >= 1:
+                qs = qs.filter(fan_count__lte=max_fan)
+            else:
+                warnings.append('max_fan 不能小于 1，已忽略')
+        except (ValueError, TypeError):
+            warnings.append('max_fan 格式有误，应为正整数，已忽略')
+
+    if min_rarity_str:
+        try:
+            min_rarity = int(min_rarity_str)
+            if 1 <= min_rarity <= 10:
+                qs = qs.filter(rarity_score__gte=min_rarity)
+            else:
+                warnings.append('min_rarity 应在 1-10 之间，已忽略')
+        except (ValueError, TypeError):
+            warnings.append('min_rarity 格式有误，应为 1-10 的整数，已忽略')
+
+    if max_rarity_str:
+        try:
+            max_rarity = int(max_rarity_str)
+            if 1 <= max_rarity <= 10:
+                qs = qs.filter(rarity_score__lte=max_rarity)
+            else:
+                warnings.append('max_rarity 应在 1-10 之间，已忽略')
+        except (ValueError, TypeError):
+            warnings.append('max_rarity 格式有误，应为 1-10 的整数，已忽略')
+
+    if is_active_str == '1':
+        qs = qs.filter(is_active=True)
+    elif is_active_str == '0':
+        qs = qs.filter(is_active=False)
+
+    try:
+        page_size = max(1, min(int(page_size_str), 100))
+    except (ValueError, TypeError):
+        page_size = 20
+        warnings.append('page_size 参数格式有误，已使用默认值 20')
+
+    try:
+        page = max(1, int(page_str))
+    except (ValueError, TypeError):
+        page = 1
+        warnings.append('page 参数格式有误，已使用默认值 1')
+
+    valid_sort_fields = [
+        'name', 'fan_count', 'rarity_score', 'hit_count',
+        'last_occurrence', 'highlight_count',
+    ]
+    if sort_by not in valid_sort_fields:
+        sort_by = 'rarity_score'
+        warnings.append(f'sort_by 参数无效，有效值为 {", ".join(valid_sort_fields)}，已使用默认值 rarity_score')
+
+    if order not in ('asc', 'desc'):
+        order = 'desc'
+        warnings.append('order 参数无效，有效值为 asc/desc，已使用默认值 desc')
+
+    qs = qs.annotate(
+        hit_count=Count(
+            'game_occurrences',
+            filter=Q(game_occurrences__game_player__game__status='completed'),
+            distinct=True
+        ),
+        last_occurrence=Max(
+            'game_occurrences__game_player__game__game_time',
+            filter=Q(game_occurrences__game_player__game__status='completed')
+        ),
+        highlight_count=Count(
+            'game_occurrences__game_player__game__highlights',
+            filter=Q(
+                game_occurrences__game_player__game__status='completed',
+                game_occurrences__game_player__game__highlights__highlight_type='rare_pattern',
+            ),
+            distinct=True
+        ),
+    )
+
+    order_prefix = '' if order == 'asc' else '-'
+    qs = qs.order_by(f'{order_prefix}{sort_by}', 'name')
+
+    paginator = Paginator(qs, page_size)
+    page_obj = paginator.get_page(page)
+
+    results = []
+    for pattern in page_obj:
+        results.append(_get_pattern_dict(pattern))
+
+    return JsonResponse({
+        'results': results,
+        'total': paginator.count,
+        'page': page_obj.number,
+        'page_size': page_size,
+        'total_pages': paginator.num_pages,
+        'has_next': page_obj.has_next(),
+        'has_previous': page_obj.has_previous(),
+        'filters': {
+            'search': search or None,
+            'category': category or None,
+            'min_fan': int(min_fan_str) if min_fan_str and min_fan_str.isdigit() else None,
+            'max_fan': int(max_fan_str) if max_fan_str and max_fan_str.isdigit() else None,
+            'min_rarity': int(min_rarity_str) if min_rarity_str and min_rarity_str.isdigit() else None,
+            'max_rarity': int(max_rarity_str) if max_rarity_str and max_rarity_str.isdigit() else None,
+            'is_active': is_active_str == '1',
+        },
+        'sort': {
+            'sort_by': sort_by,
+            'order': order,
+        },
+        'warnings': warnings if warnings else [],
+    })
+
+
+def tile_pattern_detail(request, pk):
+    """牌型百科详情查询接口
+
+    返回指定牌型的详细信息，包括牌型分类、番数、稀有度说明、
+    最近被打出时间和关联高光数量。
+
+    Path Parameters:
+        - pk: 牌型 ID
+    """
+    pattern = get_object_or_404(TilePattern, pk=pk)
+    return JsonResponse(_get_pattern_dict(pattern))
+
+
+def tile_pattern_categories(request):
+    """牌型分类聚合接口
+
+    返回按牌型分类聚合的统计信息，包含各类别的牌型数量、
+    平均番数、平均稀有度等，适用于「牌型图鉴」分类浏览场景。
+    """
+    from django.db.models import Count, Avg, Max, Min
+
+    categories = TilePattern.objects.filter(is_active=True).values(
+        'category'
+    ).annotate(
+        pattern_count=Count('id'),
+        avg_fan=Avg('fan_count'),
+        avg_rarity=Avg('rarity_score'),
+        max_fan=Max('fan_count'),
+        min_fan=Min('fan_count'),
+        max_rarity=Max('rarity_score'),
+        min_rarity=Min('rarity_score'),
+    ).order_by('category')
+
+    result = []
+    for cat in categories:
+        cat_key = cat['category']
+        cat_name = dict(TilePattern.CATEGORY_CHOICES).get(cat_key, cat_key)
+
+        hit_count = GamePlayerPattern.objects.filter(
+            tile_pattern__category=cat_key,
+            game_player__game__status='completed',
+        ).count()
+
+        highlight_count = Highlight.objects.filter(
+            game__players__patterns__tile_pattern__category=cat_key,
+            highlight_type='rare_pattern',
+        ).distinct().count()
+
+        result.append({
+            'category': cat_key,
+            'category_name': cat_name,
+            'pattern_count': cat['pattern_count'],
+            'avg_fan': round(cat['avg_fan'] or 0, 1),
+            'avg_rarity': round(cat['avg_rarity'] or 0, 1),
+            'max_fan': cat['max_fan'] or 0,
+            'min_fan': cat['min_fan'] or 0,
+            'max_rarity': cat['max_rarity'] or 0,
+            'min_rarity': cat['min_rarity'] or 0,
+            'hit_count': hit_count,
+            'highlight_count': highlight_count,
+        })
+
+    return JsonResponse({
+        'categories': result,
+        'total_categories': len(result),
+        'total_patterns': sum(c['pattern_count'] for c in result),
+    })

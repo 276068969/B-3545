@@ -20,4 +20,7 @@ urlpatterns = [
     path('highlights/<int:pk>/featured/', views.toggle_highlight_featured, name='toggle_highlight_featured'),
     path('highlights/<int:pk>/pinned/', views.toggle_highlight_pinned, name='toggle_highlight_pinned'),
     path('api/pattern-stats/', views.pattern_stats, name='pattern_stats'),
+    path('api/tile-patterns/categories/', views.tile_pattern_categories, name='tile_pattern_categories'),
+    path('api/tile-patterns/<int:pk>/', views.tile_pattern_detail, name='tile_pattern_detail'),
+    path('api/tile-patterns/', views.tile_pattern_list, name='tile_pattern_list'),
 ]
