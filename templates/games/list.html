@@ -6,17 +6,27 @@
     <div class="page-header mb-4">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h3 class="mb-0"><i class="bi bi-journal-text text-gold"></i> 战绩列表</h3>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center">
+                <div class="btn-group btn-group-sm" role="group">
+                    <a href="?{% if base_query_no_viewmode %}{{ base_query_no_viewmode }}&{% endif %}view_mode=score"
+                       class="btn {% if view_mode == 'score' %}btn-gold{% else %}btn-outline-secondary{% endif %}">
+                        <i class="bi bi-123"></i> 分数视图
+                    </a>
+                    <a href="?{% if base_query_no_viewmode %}{{ base_query_no_viewmode }}&{% endif %}view_mode=amount"
+                       class="btn {% if view_mode == 'amount' %}btn-gold{% else %}btn-outline-secondary{% endif %}">
+                        <i class="bi bi-currency-yen"></i> 金额视图
+                    </a>
+                </div>
                 {% if user.is_authenticated %}
                 <a href="/games/create/" class="btn btn-gold"><i class="bi bi-plus-circle"></i> 录入战绩</a>
                 <a href="/games/import/" class="btn btn-outline-gold"><i class="bi bi-upload"></i> 批量导入</a>
                 {% endif %}
                 <div class="btn-group">
-                    <a href="/games/export/?{{ request.GET.urlencode }}" class="btn btn-outline-secondary">
-                        <i class="bi bi-file-earmark-excel"></i> Excel
+                    <a href="/games/export/?{{ request.GET.urlencode }}{% if 'view_mode' not in request.GET %}&view_mode={{ view_mode }}{% endif %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-file-earmark-excel"></i> {% if view_mode == 'amount' %}金额{% else %}分数{% endif %}Excel
                     </a>
-                    <a href="/games/export/?{{ request.GET.urlencode }}&format=pdf" class="btn btn-outline-secondary">
-                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <a href="/games/export/?{{ request.GET.urlencode }}&format=pdf{% if 'view_mode' not in request.GET %}&view_mode={{ view_mode }}{% endif %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-file-earmark-pdf"></i> {% if view_mode == 'amount' %}金额{% else %}分数{% endif %}PDF
                     </a>
                 </div>
             </div>
@@ -34,6 +44,7 @@
         <div class="collapse show" id="filterCollapse">
             <div class="card-body-dark">
                 <form method="get" id="filterForm">
+                    <input type="hidden" name="view_mode" value="{{ view_mode }}">
                     <div class="row g-2">
                         <div class="col-6 col-md-3">
                             {{ filter_form.date_range.label_tag }}
@@ -67,7 +78,7 @@
                             <button type="submit" class="btn btn-gold btn-sm">
                                 <i class="bi bi-search"></i> 搜索
                             </button>
-                            <a href="/games/" class="btn btn-outline-secondary btn-sm">重置</a>
+                            <a href="/games/?view_mode={{ view_mode }}" class="btn btn-outline-secondary btn-sm">重置</a>
                         </div>
                     </div>
                 </form>
@@ -79,9 +90,14 @@
     {% if user.is_authenticated %}
     <form method="post" action="/games/batch-delete/" id="batchForm">
         {% csrf_token %}
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <div class="text-muted small">
                 共 <span class="text-gold">{{ total_count }}</span> 条战绩
+                {% if view_mode == 'amount' %}
+                <span class="ms-2">总流水 <span class="text-gold">¥{{ total_amount }}</span></span>
+                {% else %}
+                <span class="ms-2">总分数 <span class="text-gold">{{ total_score }}</span></span>
+                {% endif %}
                 <span id="selectedCount" class="ms-2 text-gold d-none">（已选 <span id="selNum">0</span> 条）</span>
             </div>
             <div class="d-flex gap-2 align-items-center">
@@ -97,6 +113,11 @@
     {% else %}
     <div class="text-muted mb-3 small">
         共 <span class="text-gold">{{ total_count }}</span> 条战绩
+        {% if view_mode == 'amount' %}
+        <span class="ms-2">总流水 <span class="text-gold">¥{{ total_amount }}</span></span>
+        {% else %}
+        <span class="ms-2">总分数 <span class="text-gold">{{ total_score }}</span></span>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -149,7 +170,11 @@
                         <div class="player-score-card {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
                             <img src="{{ gp.user.get_avatar_url }}" alt="{{ gp.user.get_display_name }}" class="mini-avatar">
                             <span class="ms-1">{{ gp.user.get_display_name }}</span>
+                            {% if view_mode == 'amount' %}
+                            <span class="ms-2 fw-bold">¥{{ gp.get_amount|stringformat:"+d" }}</span>
+                            {% else %}
                             <span class="ms-2 fw-bold">{{ gp.score|stringformat:"+d" }}</span>
+                            {% endif %}
                             {% if gp.is_winner %}<i class="bi bi-crown-fill text-gold ms-1 small"></i>{% endif %}
                         </div>
                         {% endfor %}

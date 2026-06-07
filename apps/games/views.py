@@ -21,16 +21,30 @@ def game_list(request):
     filter_form = GameFilterForm(request.GET or None)
     games = apply_game_filters(games, filter_form)
 
+    view_mode = request.GET.get('view_mode', 'score')
+    if view_mode not in ('score', 'amount'):
+        view_mode = 'score'
+
     paginator = Paginator(games, 20)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
 
-    # Build query string without 'page' for use in pagination links
     params = request.GET.copy()
     params.pop('page', None)
-    base_query = params.urlencode()  # e.g. "player=3&date_range=week"
+    base_query = params.urlencode()
 
-    # Pick up import errors/result stored in session by import_games view
+    params_no_viewmode = request.GET.copy()
+    params_no_viewmode.pop('page', None)
+    params_no_viewmode.pop('view_mode', None)
+    base_query_no_viewmode = params_no_viewmode.urlencode()
+
+    total_amount = 0
+    total_score = 0
+    for game in games:
+        for gp in game.players.all():
+            total_score += abs(gp.score)
+            total_amount += abs(gp.score * game.base_score)
+
     import_errors = request.session.pop('import_errors', None)
     import_result = request.session.pop('import_result', None)
 
@@ -38,7 +52,11 @@ def game_list(request):
         'page_obj': page_obj,
         'filter_form': filter_form,
         'total_count': games.count(),
+        'total_score': total_score,
+        'total_amount': total_amount,
+        'view_mode': view_mode,
         'base_query': base_query,
+        'base_query_no_viewmode': base_query_no_viewmode,
         'import_errors': import_errors,
         'import_result': import_result,
     }
@@ -400,9 +418,12 @@ def export_games(request):
     filter_form = GameFilterForm(request.GET or None)
     games = apply_game_filters(games, filter_form)
     fmt = request.GET.get('format', 'excel')
+    view_mode = request.GET.get('view_mode', 'score')
+    if view_mode not in ('score', 'amount'):
+        view_mode = 'score'
     if fmt == 'pdf':
-        return export_games_to_pdf(games)
-    return export_games_to_excel(games)
+        return export_games_to_pdf(games, view_mode=view_mode)
+    return export_games_to_excel(games, view_mode=view_mode)
 
 
 @login_required

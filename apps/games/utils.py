@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.http import HttpResponse
 
 
-def export_games_to_pdf(games_qs):
+def export_games_to_pdf(games_qs, view_mode='score'):
     """Export games queryset to PDF file using reportlab"""
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
@@ -68,23 +68,35 @@ def export_games_to_pdf(games_qs):
     cell_style = ParagraphStyle('Cell', fontName=font_name, fontSize=8)
 
     elements = []
-    elements.append(Paragraph('麻将战绩报告', title_style))
+    if view_mode == 'amount':
+        title_text = '麻将战绩报告（金额）'
+    else:
+        title_text = '麻将战绩报告'
+    elements.append(Paragraph(title_text, title_style))
     elements.append(Paragraph(
         f'导出时间：{timezone.now().strftime("%Y-%m-%d %H:%M")}  共 {games_qs.count()} 场',
         subtitle_style
     ))
     elements.append(Spacer(1, 4 * mm))
 
-    # Table header
-    headers = ['#', '游戏时间', '地点', '类型', '底分', '参与玩家 & 得分', '备注']
+    if view_mode == 'amount':
+        headers = ['#', '游戏时间', '地点', '类型', '底分(元/分)', '参与玩家 & 金额(元)', '备注']
+    else:
+        headers = ['#', '游戏时间', '地点', '类型', '底分', '参与玩家 & 得分', '备注']
     table_data = [headers]
 
     for i, game in enumerate(games_qs[:500], 1):
         players = game.players.select_related('user').order_by('-score')
-        player_str = '  '.join(
-            f"{p.user.get_display_name()}:{'+' if p.score >= 0 else ''}{p.score}"
-            for p in players
-        )
+        if view_mode == 'amount':
+            player_str = '  '.join(
+                f"{p.user.get_display_name()}:{'+' if p.score >= 0 else ''}{p.score * game.base_score}元"
+                for p in players
+            )
+        else:
+            player_str = '  '.join(
+                f"{p.user.get_display_name()}:{'+' if p.score >= 0 else ''}{p.score}"
+                for p in players
+            )
         row = [
             str(i),
             game.game_time.strftime('%Y-%m-%d %H:%M'),
@@ -118,16 +130,22 @@ def export_games_to_pdf(games_qs):
     buffer.seek(0)
 
     response = HttpResponse(buffer, content_type='application/pdf')
-    filename = f'mahjong_records_{timezone.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+    if view_mode == 'amount':
+        filename = f'mahjong_records_amount_{timezone.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+    else:
+        filename = f'mahjong_records_{timezone.now().strftime("%Y%m%d_%H%M%S")}.pdf'
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
-def export_games_to_excel(games_qs):
+def export_games_to_excel(games_qs, view_mode='score'):
     """Export games queryset to Excel file"""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = '麻将战绩'
+    if view_mode == 'amount':
+        ws.title = '麻将战绩(金额)'
+    else:
+        ws.title = '麻将战绩'
 
     # Styles
     header_font = Font(name='微软雅黑', bold=True, color='FFFFFF', size=12)
@@ -140,7 +158,10 @@ def export_games_to_excel(games_qs):
         bottom=Side(style='thin')
     )
 
-    headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分', '参与玩家', '各玩家得分', '是否补录', '备注']
+    if view_mode == 'amount':
+        headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分(元/分)', '参与玩家', '各玩家金额(元)', '是否补录', '备注']
+    else:
+        headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分', '参与玩家', '各玩家得分', '是否补录', '备注']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -153,7 +174,10 @@ def export_games_to_excel(games_qs):
     for row, game in enumerate(games_qs, 2):
         players = game.players.select_related('user').order_by('-score')
         player_names = ', '.join([p.user.get_display_name() for p in players])
-        player_scores = ', '.join([f'{p.user.get_display_name()}:{p.score}' for p in players])
+        if view_mode == 'amount':
+            player_scores = ', '.join([f'{p.user.get_display_name()}:{p.score * game.base_score}' for p in players])
+        else:
+            player_scores = ', '.join([f'{p.user.get_display_name()}:{p.score}' for p in players])
 
         row_data = [
             game.pk,
@@ -182,7 +206,10 @@ def export_games_to_excel(games_qs):
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    filename = f'mahjong_records_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    if view_mode == 'amount':
+        filename = f'mahjong_records_amount_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    else:
+        filename = f'mahjong_records_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     wb.save(response)
     return response
