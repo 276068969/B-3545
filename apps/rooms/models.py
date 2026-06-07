@@ -50,6 +50,31 @@ class Room(models.Model):
     def is_full(self):
         return self.get_player_count() >= self.max_players
 
+    def get_ready_count(self):
+        ready_count = self.members.filter(is_active=True, is_ready=True).count()
+        host_member = self.members.filter(is_active=True, user=self.host).first()
+        if host_member and not host_member.is_ready:
+            ready_count += 1
+        return ready_count
+
+    def all_ready(self):
+        active_members = self.members.filter(is_active=True).exclude(user=self.host)
+        if not active_members.exists():
+            return self.get_player_count() >= 1
+        return active_members.filter(is_ready=False).count() == 0
+
+    def can_start_game(self):
+        player_count = self.get_player_count()
+        if player_count < 2:
+            return False, '至少需要2名玩家才能开始游戏'
+        if not self.all_ready():
+            not_ready = self.members.filter(is_active=True, is_ready=False).exclude(user=self.host).count()
+            return False, f'还有 {not_ready} 名玩家未准备'
+        return True, '可以开始'
+
+    def reset_ready_status(self):
+        self.members.filter(is_active=True).update(is_ready=False)
+
     def can_join(self, user):
         if self.status != 'waiting':
             return False, '房间已关闭'

@@ -9,6 +9,7 @@ urlpatterns = [
     path('<int:pk>/', views.room_detail, name='detail'),
     path('<int:pk>/join/', views.join_room, name='join'),
     path('<int:pk>/leave/', views.leave_room, name='leave'),
+    path('<int:pk>/ready/', views.toggle_ready, name='toggle_ready'),
     path('<int:pk>/close/', views.close_room, name='close'),
     path('<int:pk>/start/', views.start_game, name='start_game'),
     path('<int:pk>/scoreboard/start/', views.start_scoreboard, name='start_scoreboard'),

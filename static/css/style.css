@@ -887,3 +887,16 @@ th.active-sort { background: rgba(201,162,39,0.06) !important; }
 .round-player-score {
     margin-right: 8px;
 }
+
+.member-ready {
+    border-left: 3px solid #2ecc71;
+}
+
+.member-not-ready {
+    border-left: 3px solid #6c757d;
+    opacity: 0.85;
+}
+
+#readyBtn {
+    min-width: 110px;
+}

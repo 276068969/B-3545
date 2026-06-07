@@ -57,11 +57,15 @@ def room_detail(request, pk):
     games = Game.objects.filter(room=room).order_by('-game_time')[:10]
     user_in_room = False
     is_host = False
+    user_is_ready = False
     if request.user.is_authenticated:
-        user_in_room = room.members.filter(user=request.user, is_active=True).exists()
+        user_member = room.members.filter(user=request.user, is_active=True).first()
+        user_in_room = user_member is not None
+        user_is_ready = user_member.is_ready if user_member else False
         is_host = room.host == request.user
     
     scoreboard = room.get_scoreboard_data()
+    can_start, start_reason = room.can_start_game()
     
     context = {
         'room': room,
@@ -69,7 +73,11 @@ def room_detail(request, pk):
         'games': games,
         'user_in_room': user_in_room,
         'is_host': is_host,
+        'user_is_ready': user_is_ready,
         'scoreboard': scoreboard,
+        'can_start_game': can_start,
+        'start_reason': start_reason,
+        'ready_count': room.get_ready_count(),
     }
     return render(request, 'rooms/detail.html', context)
 
@@ -122,6 +130,33 @@ def leave_room(request, pk):
 
 @login_required
 @require_POST
+def toggle_ready(request, pk):
+    room = get_object_or_404(Room, pk=pk)
+    member = room.members.filter(user=request.user, is_active=True).first()
+    if not member:
+        return JsonResponse({'error': '您不在此房间中'}, status=403)
+    if room.status != 'waiting':
+        return JsonResponse({'error': '游戏进行中无法切换准备状态'}, status=400)
+
+    member.is_ready = not member.is_ready
+    member.save()
+
+    ready_count = room.get_ready_count()
+    total_count = room.get_player_count()
+    can_start, start_reason = room.can_start_game()
+
+    return JsonResponse({
+        'status': 'ok',
+        'is_ready': member.is_ready,
+        'ready_count': ready_count,
+        'total_count': total_count,
+        'can_start_game': can_start,
+        'start_reason': start_reason,
+    })
+
+
+@login_required
+@require_POST
 def close_room(request, pk):
     room = get_object_or_404(Room, pk=pk)
     if room.host != request.user and not request.user.is_staff:
@@ -139,10 +174,12 @@ def start_game(request, pk):
     if room.host != request.user:
         messages.error(request, '只有房主可以开始游戏。')
         return redirect('rooms:detail', pk=pk)
-    if room.get_player_count() < 2:
-        messages.error(request, '至少需要2名玩家才能开始游戏。')
+    can_start, msg = room.can_start_game()
+    if not can_start:
+        messages.error(request, msg)
         return redirect('rooms:detail', pk=pk)
 
+    room.reset_ready_status()
     return redirect(f'/games/create/?room={pk}')
 
 
@@ -157,11 +194,13 @@ def start_scoreboard(request, pk):
     if active_game:
         return JsonResponse({'error': '当前已有进行中的游戏'}, status=400)
     
-    player_count = room.get_player_count()
-    if player_count < 2:
-        return JsonResponse({'error': '至少需要2名玩家才能开始游戏'}, status=400)
+    can_start, msg = room.can_start_game()
+    if not can_start:
+        return JsonResponse({'error': msg}, status=400)
     
     with transaction.atomic():
+        room.reset_ready_status()
+        
         game = Game.objects.create(
             room=room,
             creator=request.user,

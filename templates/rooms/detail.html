@@ -12,10 +12,20 @@
                     <span class="badge {% if room.status == 'waiting' %}bg-success{% elif room.status == 'playing' %}bg-warning text-dark{% else %}bg-secondary{% endif %} fs-6">
                         {{ room.get_status_display }}
                     </span>
+                    {% if room.status == 'waiting' and user_in_room %}
+                    <span class="badge {% if can_start_game %}bg-info{% else %}bg-secondary{% endif %} fs-6" id="readyStatusBadge">
+                        <i class="bi bi-check2-circle"></i> 准备进度: {{ ready_count }}/{{ members|length }}
+                    </span>
+                    {% endif %}
                     <span class="text-muted"><i class="bi bi-tag"></i> 房间码: <span class="text-gold fw-bold fs-5">{{ room.code }}</span></span>
                     <span class="text-muted"><i class="bi bi-joystick"></i> {{ room.get_game_type_display }}</span>
                     <span class="text-muted"><i class="bi bi-coin"></i> {{ room.base_score }}元/分</span>
                 </div>
+                {% if room.status == 'waiting' and user_in_room and not can_start_game %}
+                <p class="text-warning small mt-2 mb-0" id="startHint">
+                    <i class="bi bi-exclamation-triangle"></i> {{ start_reason }}
+                </p>
+                {% endif %}
                 {% if room.description %}
                 <p class="text-muted mt-2 mb-0">{{ room.description }}</p>
                 {% endif %}
@@ -30,8 +40,17 @@
                         </button>
                     </form>
                     {% elif user_in_room %}
+                        {% if room.status == 'waiting' and not is_host %}
+                        <button class="btn {% if user_is_ready %}btn-outline-secondary{% else %}btn-success{% endif %}" id="readyBtn" onclick="toggleReady()">
+                            <i class="bi {% if user_is_ready %}bi-x-circle{% else %}bi-check-circle{% endif %}"></i>
+                            <span id="readyBtnText">{% if user_is_ready %}取消准备{% else %}我已到位{% endif %}</span>
+                        </button>
+                        {% endif %}
                         {% if room.host == user %}
-                        <a href="/rooms/{{ room.pk }}/start/" class="btn btn-gold">
+                        <a href="/rooms/{{ room.pk }}/start/" 
+                           class="btn {% if can_start_game %}btn-gold{% else %}btn-secondary disabled{% endif %}"
+                           id="startGameBtn"
+                           {% if not can_start_game %}aria-disabled="true" tabindex="-1"{% endif %}>
                             <i class="bi bi-play-circle"></i> 开始游戏
                         </a>
                         <form method="post" action="/rooms/{{ room.pk }}/close/" class="d-inline"
@@ -69,7 +88,10 @@
             {% if is_host %}
             <div class="d-flex gap-2">
                 {% if not scoreboard.has_active_game %}
-                <button class="btn btn-sm btn-gold" onclick="startScoreboard()">
+                <button class="btn btn-sm {% if can_start_game and room.status == 'waiting' %}btn-gold{% else %}btn-secondary disabled{% endif %}" 
+                        onclick="{% if can_start_game and room.status == 'waiting' %}startScoreboard(){% endif %}"
+                        id="startScoreboardBtn"
+                        {% if not can_start_game or room.status != 'waiting' %}disabled{% endif %}>
                     <i class="bi bi-play-fill"></i> 开启记分台
                 </button>
                 {% else %}
@@ -176,15 +198,20 @@
         <!-- Members -->
         <div class="col-lg-4">
             <div class="card-dark">
-                <div class="card-header-dark">
+                <div class="card-header-dark d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">
                         <i class="bi bi-people text-gold"></i>
                         房间成员 {{ members|length }}/{{ room.max_players }}
                     </h6>
+                    {% if room.status == 'waiting' and user_in_room %}
+                    <span class="badge {% if ready_count == members|length %}bg-success{% else %}bg-secondary{% endif %}">
+                        <i class="bi bi-check2-all"></i> {{ ready_count }} 人已准备
+                    </span>
+                    {% endif %}
                 </div>
                 <div class="card-body-dark">
                     {% for member in members %}
-                    <div class="d-flex align-items-center gap-3 p-2 mb-2 rounded bg-card-inner">
+                    <div class="d-flex align-items-center gap-3 p-2 mb-2 rounded bg-card-inner {% if member.is_ready or member.user == room.host %}member-ready{% else %}member-not-ready{% endif %}">
                         <img src="{{ member.user.get_avatar_url }}" class="player-avatar">
                         <div class="flex-grow-1">
                             <a href="/accounts/profile/{{ member.user.username }}/" class="player-name">
@@ -194,8 +221,18 @@
                             <span class="badge bg-gold text-dark ms-1 small">房主</span>
                             {% endif %}
                         </div>
-                        <div class="text-muted small">
-                            {{ member.joined_at|date:"H:i" }} 加入
+                        <div class="text-end">
+                            {% if member.is_ready or member.user == room.host %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle-fill"></i> 
+                                {% if member.user == room.host %}房主就绪{% else %}已准备{% endif %}
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary"><i class="bi bi-clock"></i> 未准备</span>
+                            {% endif %}
+                            <div class="text-muted small mt-1">
+                                {{ member.joined_at|date:"H:i" }} 加入
+                            </div>
                         </div>
                     </div>
                     {% empty %}
@@ -290,12 +327,104 @@
 const ROOM_ID = {{ room.pk }};
 const IS_HOST = {{ is_host|lower }};
 const CURRENT_ROUND = {{ scoreboard.current_round }};
+const USER_IS_READY = {{ user_is_ready|lower }};
 
 const roomMembers = [
     {% for member in members %}
-    { id: {{ member.user.pk }}, name: "{{ member.user.get_display_name }}", avatar: "{{ member.user.get_avatar_url }}" },
+    { id: {{ member.user.pk }}, name: "{{ member.user.get_display_name }}", avatar: "{{ member.user.get_avatar_url }}", is_ready: {{ member.is_ready|lower }} },
     {% endfor %}
 ];
+
+function toggleReady() {
+    const btn = document.getElementById('readyBtn');
+    const btnText = document.getElementById('readyBtnText');
+    
+    btn.disabled = true;
+    
+    fetch(`/rooms/${ROOM_ID}/ready/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            const isReady = data.is_ready;
+            
+            if (isReady) {
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+                btn.innerHTML = '<i class="bi bi-x-circle"></i> <span id="readyBtnText">取消准备</span>';
+            } else {
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-success');
+                btn.innerHTML = '<i class="bi bi-check-circle"></i> <span id="readyBtnText">我已到位</span>';
+            }
+            
+            const readyBadge = document.getElementById('readyStatusBadge');
+            if (readyBadge) {
+                readyBadge.innerHTML = `<i class="bi bi-check2-circle"></i> 准备进度: ${data.ready_count}/${data.total_count}`;
+                if (data.can_start_game) {
+                    readyBadge.classList.remove('bg-secondary');
+                    readyBadge.classList.add('bg-info');
+                } else {
+                    readyBadge.classList.remove('bg-info');
+                    readyBadge.classList.add('bg-secondary');
+                }
+            }
+            
+            const startHint = document.getElementById('startHint');
+            if (startHint) {
+                if (data.can_start_game) {
+                    startHint.style.display = 'none';
+                } else {
+                    startHint.style.display = 'block';
+                    startHint.innerHTML = `<i class="bi bi-exclamation-triangle"></i> ${data.start_reason}`;
+                }
+            }
+            
+            const startBtn = document.getElementById('startGameBtn');
+            if (startBtn) {
+                if (data.can_start_game) {
+                    startBtn.classList.remove('btn-secondary', 'disabled');
+                    startBtn.classList.add('btn-gold');
+                    startBtn.removeAttribute('aria-disabled');
+                    startBtn.removeAttribute('tabindex');
+                } else {
+                    startBtn.classList.remove('btn-gold');
+                    startBtn.classList.add('btn-secondary', 'disabled');
+                    startBtn.setAttribute('aria-disabled', 'true');
+                    startBtn.setAttribute('tabindex', '-1');
+                }
+            }
+            
+            const scoreboardBtn = document.getElementById('startScoreboardBtn');
+            if (scoreboardBtn) {
+                if (data.can_start_game) {
+                    scoreboardBtn.classList.remove('btn-secondary', 'disabled');
+                    scoreboardBtn.classList.add('btn-gold');
+                    scoreboardBtn.disabled = false;
+                    scoreboardBtn.setAttribute('onclick', 'startScoreboard()');
+                } else {
+                    scoreboardBtn.classList.remove('btn-gold');
+                    scoreboardBtn.classList.add('btn-secondary', 'disabled');
+                    scoreboardBtn.disabled = true;
+                    scoreboardBtn.removeAttribute('onclick');
+                }
+            }
+            
+            showToast(isReady ? '已标记为准备就绪' : '已取消准备', isReady ? 'success' : 'info');
+        } else {
+            showAlert(data.error || '操作失败');
+        }
+    })
+    .catch(e => showAlert('网络错误，请重试'))
+    .finally(() => {
+        btn.disabled = false;
+    });
+}
 
 function startScoreboard() {
     showConfirm('确认开启记分台？开启后将创建一局新的实时游戏。', function() {
