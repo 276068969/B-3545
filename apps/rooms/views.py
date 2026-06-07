@@ -208,25 +208,34 @@ def record_round(request, pk):
         if not scores:
             return JsonResponse({'error': '请输入各玩家分数'}, status=400)
         
-        total = sum(int(v) for v in scores.values())
+        game_players = list(game.players.all())
+        valid_player_ids = {gp.user_id for gp in game_players}
+        
+        parsed_scores = {}
+        for user_id_str, score_str in scores.items():
+            try:
+                user_id = int(user_id_str)
+                score = int(score_str)
+            except (ValueError, TypeError):
+                return JsonResponse({'error': '分数必须为整数'}, status=400)
+            
+            if user_id not in valid_player_ids:
+                return JsonResponse({'error': f'无效的玩家ID: {user_id}'}, status=400)
+            
+            parsed_scores[user_id] = score
+        
+        if len(parsed_scores) != len(valid_player_ids):
+            return JsonResponse({'error': '请输入所有玩家的分数'}, status=400)
+        
+        total = sum(parsed_scores.values())
         if total != 0:
             return JsonResponse({'error': f'所有玩家得分之和必须为0（当前为{total}）'}, status=400)
         
         current_round = room.get_current_round()
         next_round = current_round + 1
         
-        game_players = list(game.players.all())
-        valid_player_ids = {gp.user_id for gp in game_players}
-        
-        for user_id, score in scores.items():
-            user_id = int(user_id)
-            if user_id not in valid_player_ids:
-                return JsonResponse({'error': '无效的玩家ID'}, status=400)
-        
         with transaction.atomic():
-            for user_id, score in scores.items():
-                user_id = int(user_id)
-                score = int(score)
+            for user_id, score in parsed_scores.items():
                 GameSnapshot.objects.create(
                     game=game,
                     player_id=user_id,
@@ -243,8 +252,6 @@ def record_round(request, pk):
         
     except json.JSONDecodeError:
         return JsonResponse({'error': '无效的JSON数据'}, status=400)
-    except ValueError as e:
-        return JsonResponse({'error': str(e)}, status=400)
 
 
 @login_required
@@ -289,6 +296,11 @@ def end_scoreboard(request, pk):
         
         game.status = 'completed'
         game.save()
+        
+        remaining_active = room.games.filter(status='active').count()
+        if remaining_active == 0:
+            room.status = 'waiting'
+            room.save()
     
     return JsonResponse({
         'status': 'ok',
