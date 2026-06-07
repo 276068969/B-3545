@@ -34,6 +34,21 @@
             </div>
             {% endif %}
         </div>
+
+        <div class="mt-3 pt-3 border-top border-secondary">
+            <ul class="nav nav-tabs nav-tabs-dark gap-2" style="border-bottom:none">
+                <li class="nav-item">
+                    <a class="nav-link active" href="{% if is_own_profile %}{% url 'accounts:profile' %}{% else %}{% url 'accounts:user_profile' profile_user.username %}{% endif %}">
+                        <i class="bi bi-person"></i> 战绩主页
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% if is_own_profile %}{% url 'accounts:pattern_profile' %}{% else %}{% url 'accounts:user_pattern_profile' profile_user.username %}{% endif %}">
+                        <i class="bi bi-tiles"></i> 牌型档案
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div>
 
     <!-- Avatar Upload Form (hidden) -->
@@ -104,6 +119,12 @@
                         <div class="stat-item">
                             <div class="stat-value text-info">{{ stats.comeback_count }}</div>
                             <div class="stat-name">逆转胜利</div>
+                        </div>
+                        <div class="stat-item">
+                            <a href="{% if is_own_profile %}{% url 'accounts:pattern_profile' %}{% else %}{% url 'accounts:user_pattern_profile' profile_user.username %}{% endif %}" class="text-decoration-none">
+                                <div class="stat-value text-gold"><i class="bi bi-tiles"></i></div>
+                                <div class="stat-name">牌型档案 <i class="bi bi-arrow-right-short small"></i></div>
+                            </a>
                         </div>
                         {% if is_own_profile %}
                         <div class="stat-item">

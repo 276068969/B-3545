@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+{% block title %}{{ profile_user.get_display_name }} 的牌型档案{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="profile-header mb-4">
+        <div class="row align-items-center">
+            <div class="col-auto">
+                <div class="avatar-wrapper position-relative">
+                    <img src="{{ profile_user.get_avatar_url }}" alt="avatar" class="profile-avatar">
+                </div>
+            </div>
+            <div class="col">
+                <h2 class="mb-1 text-light">{{ profile_user.get_display_name }}</h2>
+                <div class="text-muted">@{{ profile_user.username }}</div>
+                {% if profile_user.bio %}
+                <div class="mt-2 text-secondary">{{ profile_user.bio }}</div>
+                {% endif %}
+                <div class="mt-2 text-muted small">
+                    <i class="bi bi-calendar3"></i> 注册于 {{ profile_user.created_at|date:"Y年m月d日" }}
+                </div>
+            </div>
+            {% if is_own_profile %}
+            <div class="col-auto">
+                <a href="/accounts/profile/edit/" class="btn btn-outline-gold">
+                    <i class="bi bi-pencil"></i> 编辑资料
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="mt-3 pt-3 border-top border-secondary">
+            <ul class="nav nav-tabs nav-tabs-dark gap-2" style="border-bottom:none">
+                <li class="nav-item">
+                    <a class="nav-link" href="{% if is_own_profile %}{% url 'accounts:profile' %}{% else %}{% url 'accounts:user_profile' profile_user.username %}{% endif %}">
+                        <i class="bi bi-person"></i> 战绩主页
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="{% if is_own_profile %}{% url 'accounts:pattern_profile' %}{% else %}{% url 'accounts:user_pattern_profile' profile_user.username %}{% endif %}">
+                        <i class="bi bi-tiles"></i> 牌型档案
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card-dark mb-4">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart text-gold"></i> 牌型总览</h6>
+                </div>
+                <div class="card-body-dark">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value text-gold">{{ total_pattern_count }}</div>
+                            <div class="stat-name">胡牌总次数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-info">{{ avg_fan }}</div>
+                            <div class="stat-name">平均番数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-win">{{ total_fan_sum }}</div>
+                            <div class="stat-name">累计番数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-gold">
+                                {% if highest_fan_pattern %}{{ highest_fan_pattern.tile_pattern__fan_count }}{% else %}0{% endif %}
+                            </div>
+                            <div class="stat-name">最高番数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-success">{{ self_draw_count }}</div>
+                            <div class="stat-name">自摸次数</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-warning">{{ rare_patterns_count }}</div>
+                            <div class="stat-name">稀有牌型</div>
+                        </div>
+                    </div>
+
+                    {% if total_pattern_count > 0 %}
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>自摸率</span>
+                            <span>{{ self_draw_rate }}%</span>
+                        </div>
+                        <div class="progress bg-dark-custom" style="height:8px">
+                            <div class="progress-bar bg-success" style="width:{{ self_draw_rate }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if highest_fan_pattern %}
+            <div class="card-dark mb-4 highlight-featured-card">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-trophy text-gold"></i> 最高番记录</h6>
+                </div>
+                <div class="card-body-dark text-center">
+                    <div class="fs-1 text-gold fw-bold mb-2">{{ highest_fan_pattern.tile_pattern__fan_count }}番</div>
+                    <div class="fs-5 text-light mb-2">{{ highest_fan_pattern.tile_pattern__name }}</div>
+                    <div class="text-muted small mb-3">{{ highest_fan_pattern.tile_pattern__description }}</div>
+                    <div class="d-flex justify-content-center gap-3">
+                        <span class="stat-chip">
+                            <i class="bi bi-repeat"></i> 共 {{ highest_fan_pattern.count }} 次
+                        </span>
+                        <span class="stat-chip">
+                            <i class="bi bi-hand-thumbs-up"></i> 稀有度 {{ highest_fan_pattern.tile_pattern__rarity_score }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-pie-chart text-gold"></i> 牌型分布</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% if categories_data %}
+                    <div class="d-flex flex-column gap-2">
+                        {% for cat in categories_data %}
+                        {% if cat.count > 0 %}
+                        <div>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span class="text-light">{{ cat.label }}</span>
+                                <span class="text-muted">{{ cat.count }} 次</span>
+                            </div>
+                            <div class="progress bg-dark-custom" style="height:6px">
+                                <div class="progress-bar 
+                                    {% if cat.key == 'special' %}bg-danger
+                                    {% elif cat.key == 'color' %}bg-primary
+                                    {% elif cat.key == 'honor' %}bg-warning
+                                    {% elif cat.key == 'basic' %}bg-secondary
+                                    {% elif cat.key == 'combo' %}bg-info
+                                    {% else %}bg-gold{% endif %}"
+                                    style="width:{{ cat.percentage }}%"></div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="bi bi-inbox fs-1 mb-2 d-block"></i>
+                        <small>暂无牌型记录</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            {% if pattern_trend_data %}
+            <div class="card-dark mb-4">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-graph-up text-gold"></i> 近期番数趋势</h6>
+                </div>
+                <div class="card-body-dark">
+                    <canvas id="patternTrendChart" height="100"></canvas>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card-dark mb-4">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-star text-gold"></i> 最常打出的牌型</h6>
+                    <span class="text-muted small">共 {{ top_patterns|length }} 种</span>
+                </div>
+                <div class="card-body-dark p-0">
+                    {% if top_patterns %}
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:50px">排名</th>
+                                    <th>牌型名称</th>
+                                    <th style="width:80px">类别</th>
+                                    <th style="width:70px">番数</th>
+                                    <th style="width:80px">次数</th>
+                                    <th style="width:90px">自摸</th>
+                                    <th style="width:90px">累计番</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in top_patterns %}
+                                <tr>
+                                    <td>
+                                        <span class="rank-badge {% if forloop.counter <= 3 %}rank-{{ forloop.counter }}{% endif %}">
+                                            {{ forloop.counter }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="pattern-display-tag">{{ p.tile_pattern__name }}</span>
+                                            {% if p.tile_pattern__rarity_score >= 8 %}
+                                            <span class="badge bg-danger text-white" style="font-size:0.65rem">稀有</span>
+                                            {% elif p.tile_pattern__rarity_score >= 6 %}
+                                            <span class="badge bg-warning text-dark" style="font-size:0.65rem">少见</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if p.tile_pattern__description %}
+                                        <div class="text-muted small mt-1">{{ p.tile_pattern__description }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if p.tile_pattern__category == 'special' %}bg-danger
+                                            {% elif p.tile_pattern__category == 'color' %}bg-primary
+                                            {% elif p.tile_pattern__category == 'honor' %}bg-warning text-dark
+                                            {% elif p.tile_pattern__category == 'basic' %}bg-secondary
+                                            {% elif p.tile_pattern__category == 'combo' %}bg-info
+                                            {% else %}bg-gold text-dark{% endif %}"
+                                            style="font-size:0.7rem">
+                                            {{ p.tile_pattern__category }}
+                                        </span>
+                                    </td>
+                                    <td class="text-gold fw-bold">{{ p.tile_pattern__fan_count }}</td>
+                                    <td class="text-light">{{ p.count }}</td>
+                                    <td class="text-success">{{ p.self_draw_count }}</td>
+                                    <td class="text-info">{{ p.total_fan }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-tiles fs-1 mb-3 d-block opacity-50"></i>
+                        <p class="mb-0">暂无牌型记录</p>
+                        <p class="small mb-0">录入战绩时添加牌型后，这里会显示你的胡牌偏好</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if rare_highlights %}
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-stars text-gold"></i> 稀有牌型高光</h6>
+                    <a href="/leaderboard/highlights/?type=rare_pattern&winner={{ profile_user.pk }}" class="btn btn-sm btn-outline-gold">查看全部</a>
+                </div>
+                <div class="card-body-dark">
+                    <div class="row g-3">
+                        {% for hl in rare_highlights %}
+                        <div class="col-md-6">
+                            <div class="highlight-card-full highlight-featured-card">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <span class="badge badge-rare_pattern">
+                                        <i class="bi bi-gem"></i> 稀有牌型
+                                    </span>
+                                    <span class="highlight-score-badge">
+                                        <i class="bi bi-lightning"></i> {{ hl.highlight_score }}
+                                    </span>
+                                </div>
+                                <h6 class="highlight-title mb-2">{{ hl.get_display_title }}</h6>
+                                {% if hl.description %}
+                                <p class="highlight-desc text-muted small mb-3">{{ hl.description }}</p>
+                                {% endif %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <a href="/games/{{ hl.game.pk }}/" class="text-gold text-decoration-none small">
+                                        <i class="bi bi-box-arrow-up-right"></i> 查看对局
+                                    </a>
+                                    <span class="text-muted small">
+                                        <i class="bi bi-calendar"></i> {{ hl.game.game_time|date:"m/d" }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const patternTrendLabels = {{ pattern_trend_labels|safe }};
+const patternTrendData = {{ pattern_trend_data|safe }};
+
+if (patternTrendLabels && patternTrendLabels.length > 0) {
+    const ctx = document.getElementById('patternTrendChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: patternTrendLabels,
+                datasets: [{
+                    label: '番数',
+                    data: patternTrendData,
+                    borderColor: '#c9a227',
+                    backgroundColor: 'rgba(201,162,39,0.15)',
+                    tension: 0.3,
+                    fill: true,
+                    pointBackgroundColor: patternTrendData.map(v => {
+                        if (v >= 64) return '#9b59b6';
+                        if (v >= 24) return '#e74c3c';
+                        if (v >= 8) return '#f39c12';
+                        return '#c9a227';
+                    }),
+                    pointRadius: 5,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return '番数: ' + context.parsed.y + '番';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#aaa' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#aaa', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+                    }
+                }
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

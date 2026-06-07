@@ -10,7 +10,7 @@
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <!-- Custom CSS -->
-    <link href="/static/css/style.css?v=20260607" rel="stylesheet">
+    <link href="/static/css/style.css?v=2026060701" rel="stylesheet">
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -69,6 +69,7 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
                             <li><a class="dropdown-item" href="/accounts/profile/"><i class="bi bi-person"></i> 我的主页</a></li>
+                            <li><a class="dropdown-item" href="/accounts/profile/patterns/"><i class="bi bi-tiles"></i> 牌型档案</a></li>
                             <li><a class="dropdown-item" href="/accounts/profile/edit/"><i class="bi bi-pencil"></i> 编辑资料</a></li>
                             <li><a class="dropdown-item" href="/accounts/profile/highlights/"><i class="bi bi-heart-fill"></i> 我的收藏</a></li>
                             <li><a class="dropdown-item" href="/games/?player={{ user.pk }}"><i class="bi bi-list-ul"></i> 我的战绩</a></li>
