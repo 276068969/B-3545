@@ -3,6 +3,105 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.utils import timezone
 from django.http import HttpResponse
+from collections import defaultdict
+
+
+ERROR_TYPE_TIME_FORMAT = 'time_format'
+ERROR_TYPE_PLAYER_MISSING = 'player_missing'
+ERROR_TYPE_SCORE_IMBALANCE = 'score_imbalance'
+ERROR_TYPE_INSUFFICIENT_PLAYERS = 'insufficient_players'
+ERROR_TYPE_SCORE_FORMAT = 'score_format'
+ERROR_TYPE_PARSE_ERROR = 'parse_error'
+
+ERROR_TYPE_LABELS = {
+    ERROR_TYPE_TIME_FORMAT: '时间格式异常',
+    ERROR_TYPE_PLAYER_MISSING: '玩家缺失',
+    ERROR_TYPE_SCORE_IMBALANCE: '分数不平衡',
+    ERROR_TYPE_INSUFFICIENT_PLAYERS: '玩家数量不足',
+    ERROR_TYPE_SCORE_FORMAT: '得分格式错误',
+    ERROR_TYPE_PARSE_ERROR: '解析错误',
+}
+
+
+class ImportErrorItem:
+    def __init__(self, row_num, message, error_type, details=None):
+        self.row_num = row_num
+        self.message = message
+        self.error_type = error_type
+        self.details = details or {}
+
+    def to_dict(self):
+        return {
+            'row_num': self.row_num,
+            'message': self.message,
+            'error_type': self.error_type,
+            'error_type_label': ERROR_TYPE_LABELS.get(self.error_type, '其他错误'),
+            'details': self.details,
+        }
+
+
+class ImportResult:
+    def __init__(self):
+        self.games_data = []
+        self.errors = []
+        self._error_groups = defaultdict(list)
+
+    def add_error(self, error_item):
+        self.errors.append(error_item)
+        self._error_groups[error_item.error_type].append(error_item)
+
+    @property
+    def success_count(self):
+        return len(self.games_data)
+
+    @property
+    def error_count(self):
+        return len(self.errors)
+
+    @property
+    def total_count(self):
+        return self.success_count + self.error_count
+
+    def get_errors_by_type(self, error_type):
+        return self._error_groups.get(error_type, [])
+
+    def get_error_summary(self):
+        groups = []
+        for error_type, label in ERROR_TYPE_LABELS.items():
+            errors = self._error_groups.get(error_type, [])
+            if errors:
+                groups.append({
+                    'error_type': error_type,
+                    'label': label,
+                    'count': len(errors),
+                    'errors': [e.to_dict() for e in errors],
+                })
+        other_errors = [
+            e for e in self.errors
+            if e.error_type not in ERROR_TYPE_LABELS
+        ]
+        if other_errors:
+            groups.append({
+                'error_type': 'other',
+                'label': '其他错误',
+                'count': len(other_errors),
+                'errors': [e.to_dict() for e in other_errors],
+            })
+        return groups
+
+    def get_summary_dict(self):
+        return {
+            'total': self.total_count,
+            'success_count': self.success_count,
+            'error_count': self.error_count,
+            'error_groups': self.get_error_summary(),
+        }
+
+    def get_flat_errors(self):
+        return [e.to_dict() for e in self.errors]
+
+    def get_error_messages(self):
+        return [e.message for e in self.errors]
 
 
 def export_games_to_pdf(games_qs, view_mode='score'):
@@ -255,9 +354,12 @@ def get_import_template():
 
 
 def _parse_rows(rows_iter, start_row=2):
-    """Parse iterable of row tuples into game data (shared by Excel and CSV parsers)"""
-    games_data = []
-    errors = []
+    """Parse iterable of row tuples into game data (shared by Excel and CSV parsers)
+
+    Returns:
+        ImportResult: 结构化的导入结果，包含成功数据和分类错误
+    """
+    result = ImportResult()
     from apps.accounts.models import User
     from datetime import datetime
 
@@ -277,11 +379,18 @@ def _parse_rows(rows_iter, start_row=2):
                 else:
                     game_time = timezone.make_aware(datetime.strptime(game_time_str, '%Y-%m-%d %H:%M'))
             except ValueError:
-                errors.append(f'第{row_num}行：时间格式错误 "{game_time_str}"')
+                result.add_error(ImportErrorItem(
+                    row_num=row_num,
+                    message=f'第{row_num}行：时间格式错误 "{game_time_str}"',
+                    error_type=ERROR_TYPE_TIME_FORMAT,
+                    details={'game_time_str': game_time_str},
+                ))
                 continue
 
             players_data = []
             total_score = 0
+            has_score_format_error = False
+            missing_players = []
             for i in range(4):
                 username_col = 4 + i * 2
                 score_col = 5 + i * 2
@@ -290,24 +399,47 @@ def _parse_rows(rows_iter, start_row=2):
                     try:
                         score = int(row[score_col]) if row[score_col] is not None else 0
                     except (ValueError, TypeError):
-                        errors.append(f'第{row_num}行：玩家{i+1}得分格式错误')
+                        result.add_error(ImportErrorItem(
+                            row_num=row_num,
+                            message=f'第{row_num}行：玩家{i+1}得分格式错误',
+                            error_type=ERROR_TYPE_SCORE_FORMAT,
+                            details={'player_index': i + 1, 'username': username},
+                        ))
+                        has_score_format_error = True
                         score = 0
                     try:
                         user = User.objects.get(username=username)
                         players_data.append({'user': user, 'score': score})
                         total_score += score
                     except User.DoesNotExist:
-                        errors.append(f'第{row_num}行：用户 "{username}" 不存在')
+                        missing_players.append(username)
+                        result.add_error(ImportErrorItem(
+                            row_num=row_num,
+                            message=f'第{row_num}行：用户 "{username}" 不存在',
+                            error_type=ERROR_TYPE_PLAYER_MISSING,
+                            details={'username': username},
+                        ))
 
             if len(players_data) < 2:
-                errors.append(f'第{row_num}行：至少需要2名玩家')
+                if not missing_players and not has_score_format_error:
+                    result.add_error(ImportErrorItem(
+                        row_num=row_num,
+                        message=f'第{row_num}行：至少需要2名玩家',
+                        error_type=ERROR_TYPE_INSUFFICIENT_PLAYERS,
+                        details={'player_count': len(players_data)},
+                    ))
                 continue
 
             if total_score != 0:
-                errors.append(f'第{row_num}行：得分总和不为0（当前为{total_score}）')
+                result.add_error(ImportErrorItem(
+                    row_num=row_num,
+                    message=f'第{row_num}行：得分总和不为0（当前为{total_score}）',
+                    error_type=ERROR_TYPE_SCORE_IMBALANCE,
+                    details={'total_score': total_score},
+                ))
                 continue
 
-            games_data.append({
+            result.games_data.append({
                 'game_time': game_time,
                 'location': location,
                 'game_type': game_type,
@@ -317,20 +449,27 @@ def _parse_rows(rows_iter, start_row=2):
                 'row_num': row_num,
             })
         except Exception as e:
-            errors.append(f'第{row_num}行：解析错误 {str(e)}')
+            result.add_error(ImportErrorItem(
+                row_num=row_num,
+                message=f'第{row_num}行：解析错误 {str(e)}',
+                error_type=ERROR_TYPE_PARSE_ERROR,
+                details={'exception': str(e)},
+            ))
 
-    return games_data, errors
+    return result
 
 
 def parse_import_file(file_obj):
-    """Parse Excel or CSV import file, return list of game data and errors"""
+    """Parse Excel or CSV import file, return ImportResult with structured data
+
+    Returns:
+        ImportResult: 结构化的导入结果，包含成功数据和分类错误
+    """
     filename = getattr(file_obj, 'name', '')
     if filename.lower().endswith('.csv'):
         import csv
-        import codecs
         try:
             content = file_obj.read()
-            # Try UTF-8 with BOM, then GB18030 for Chinese Windows CSV
             for enc in ('utf-8-sig', 'utf-8', 'gb18030', 'gbk'):
                 try:
                     text = content.decode(enc)
@@ -338,22 +477,45 @@ def parse_import_file(file_obj):
                 except UnicodeDecodeError:
                     continue
             else:
-                return [], ['CSV文件编码无法识别，请另存为UTF-8编码后再导入']
+                result = ImportResult()
+                result.add_error(ImportErrorItem(
+                    row_num=0,
+                    message='CSV文件编码无法识别，请另存为UTF-8编码后再导入',
+                    error_type=ERROR_TYPE_PARSE_ERROR,
+                ))
+                return result
             reader = csv.reader(text.splitlines())
             rows = list(reader)
             if not rows:
-                return [], ['CSV文件为空']
-            data_rows = [tuple(r) for r in rows[1:]]  # skip header
+                result = ImportResult()
+                result.add_error(ImportErrorItem(
+                    row_num=0,
+                    message='CSV文件为空',
+                    error_type=ERROR_TYPE_PARSE_ERROR,
+                ))
+                return result
+            data_rows = [tuple(r) for r in rows[1:]]
             return _parse_rows(iter(data_rows))
         except Exception as e:
-            return [], [f'CSV文件解析失败：{str(e)}']
+            result = ImportResult()
+            result.add_error(ImportErrorItem(
+                row_num=0,
+                message=f'CSV文件解析失败：{str(e)}',
+                error_type=ERROR_TYPE_PARSE_ERROR,
+            ))
+            return result
 
-    # Excel
     try:
         wb = openpyxl.load_workbook(file_obj)
         ws = wb.active
     except Exception as e:
-        return [], [f'文件格式错误：{str(e)}']
+        result = ImportResult()
+        result.add_error(ImportErrorItem(
+            row_num=0,
+            message=f'文件格式错误：{str(e)}',
+            error_type=ERROR_TYPE_PARSE_ERROR,
+        ))
+        return result
 
     return _parse_rows(ws.iter_rows(min_row=2, values_only=True))
 

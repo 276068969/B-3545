@@ -9,7 +9,10 @@ from django.db.models import Q
 from .models import Game, GamePlayer, TilePattern, GamePlayerPattern, Highlight, PlayerStats
 from .forms import GameForm, GameEditForm, GameFilterForm
 import json
-from .utils import export_games_to_excel, export_games_to_pdf, get_import_template, parse_import_file, apply_game_filters
+from .utils import (
+    export_games_to_excel, export_games_to_pdf, get_import_template,
+    parse_import_file, apply_game_filters, ImportResult,
+)
 from apps.accounts.models import User
 
 
@@ -47,6 +50,7 @@ def game_list(request):
 
     import_errors = request.session.pop('import_errors', None)
     import_result = request.session.pop('import_result', None)
+    import_result_summary = request.session.pop('import_result_summary', None)
 
     context = {
         'page_obj': page_obj,
@@ -59,6 +63,7 @@ def game_list(request):
         'base_query_no_viewmode': base_query_no_viewmode,
         'import_errors': import_errors,
         'import_result': import_result,
+        'import_result_summary': import_result_summary,
     }
     return render(request, 'games/list.html', context)
 
@@ -359,10 +364,11 @@ def import_games(request):
             messages.error(request, '只支持 Excel（.xlsx/.xls）或 CSV（.csv）格式。')
             return redirect('games:import')
 
-        games_data, errors = parse_import_file(file)
+        import_result = parse_import_file(file)
+        games_data = import_result.games_data
 
         if request.POST.get('preview') == '1':
-            request.session['import_preview'] = [
+            preview_data = [
                 {
                     'game_time': gd['game_time'].isoformat(),
                     'location': gd['location'],
@@ -376,11 +382,14 @@ def import_games(request):
                 }
                 for gd in games_data
             ]
+            request.session['import_preview'] = preview_data
+            request.session['import_result_summary'] = import_result.get_summary_dict()
             context = {
-                'preview_data': request.session['import_preview'],
-                'errors': errors,
-                'total': len(games_data),
-                'error_count': len(errors),
+                'preview_data': preview_data,
+                'import_result': import_result,
+                'errors': import_result.get_error_messages(),
+                'total': import_result.success_count,
+                'error_count': import_result.error_count,
             }
             return render(request, 'games/import_preview.html', context)
 
@@ -399,7 +408,8 @@ def import_games(request):
                     status='completed',
                 )
                 max_score = max(p['score'] for p in gd['players'])
-                for i, p in enumerate(gd['players']):
+                sorted_players = sorted(gd['players'], key=lambda p: p['score'], reverse=True)
+                for i, p in enumerate(sorted_players):
                     GamePlayer.objects.create(
                         game=game,
                         user=p['user'],
@@ -416,10 +426,10 @@ def import_games(request):
                 stats, _ = PlayerStats.objects.get_or_create(user=user)
                 stats.recalculate()
 
-        if errors:
-            # Store errors in session so the list page can show them in a modal
-            request.session['import_errors'] = errors[:50]  # cap at 50
-            request.session['import_result'] = f'导入完成：成功 {imported_count} 条，{len(errors)} 个问题已跳过。'
+        if import_result.errors:
+            request.session['import_result_summary'] = import_result.get_summary_dict()
+            request.session['import_errors'] = import_result.get_error_messages()[:50]
+            request.session['import_result'] = f'导入完成：成功 {imported_count} 条，{import_result.error_count} 个问题已跳过。'
         else:
             messages.success(request, f'成功导入 {imported_count} 条战绩！')
         return redirect('games:list')

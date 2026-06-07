@@ -10,20 +10,52 @@
     <!-- Stats row -->
     <div class="d-flex gap-3 mb-4 flex-wrap">
         <div class="card-dark px-4 py-3 rounded text-center">
-            <div class="text-gold fs-4 fw-bold">{{ total }}</div>
-            <div class="text-muted small">有效数据</div>
+            <div class="text-success fs-4 fw-bold">{{ total }}</div>
+            <div class="text-muted small">成功导入</div>
         </div>
         {% if error_count %}
         <div class="card-dark px-4 py-3 rounded text-center">
             <div class="text-warning fs-4 fw-bold">{{ error_count }}</div>
-            <div class="text-muted small">错误行（将跳过）</div>
+            <div class="text-muted small">跳过行数</div>
         </div>
+        {% endif %}
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-gold fs-4 fw-bold">{{ import_result.total_count }}</div>
+            <div class="text-muted small">总计处理</div>
+        </div>
+        {% if error_count %}
         <button type="button" class="btn btn-outline-warning align-self-center"
                 data-bs-toggle="modal" data-bs-target="#previewErrorModal">
             <i class="bi bi-exclamation-triangle me-1"></i>查看错误详情
         </button>
         {% endif %}
     </div>
+
+    {% if import_result and import_result.get_error_summary %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark">
+            <h6 class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i> 错误分类统计</h6>
+        </div>
+        <div class="card-body-dark">
+            <div class="row g-3">
+                {% for group in import_result.get_error_summary %}
+                <div class="col-sm-6 col-md-4 col-lg-3">
+                    <div class="p-3 rounded" style="background:#0d2030;border:1px solid #1e3a4f">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-light small">{{ group.label }}</span>
+                            <span class="badge bg-warning text-dark">{{ group.count }}</span>
+                        </div>
+                        <div class="progress" style="height:6px">
+                            <div class="progress-bar bg-warning" role="progressbar"
+                                 style="width:{% widthratio group.count import_result.total_count 100 %}%"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if total == 0 %}
     <div class="card-dark p-4 text-center mb-4">
@@ -90,10 +122,10 @@
     {% endif %}
 </div>
 
-{% if errors %}
+{% if import_result and import_result.errors %}
 <!-- Error Modal -->
 <div class="modal fade" id="previewErrorModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:520px">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:600px">
         <div class="modal-content" style="background:#1a2f3e;border:1px solid #2d4a5e">
             <div class="modal-header border-secondary pb-2">
                 <h6 class="modal-title text-warning mb-0">
@@ -105,14 +137,23 @@
                 <p class="text-muted small mb-3">
                     常见原因：用户名不存在（须与系统注册账号完全一致）、得分总和不为 0、时间格式错误。
                 </p>
-                <ul class="list-unstyled mb-0">
-                    {% for err in errors %}
-                    <li class="py-1 border-bottom border-secondary d-flex gap-2 align-items-start" style="font-size:13px">
-                        <i class="bi bi-x-circle text-danger flex-shrink-0 mt-1"></i>
-                        <span class="text-light">{{ err }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
+                {% for group in import_result.get_error_summary %}
+                <div class="mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-exclamation-circle text-warning"></i>
+                        <span class="text-warning fw-bold small">{{ group.label }}</span>
+                        <span class="badge bg-secondary">{{ group.count }} 条</span>
+                    </div>
+                    <ul class="list-unstyled mb-0 ms-4">
+                        {% for err in group.errors %}
+                        <li class="py-1 border-bottom border-secondary d-flex gap-2 align-items-start" style="font-size:13px">
+                            <i class="bi bi-x-circle text-danger flex-shrink-0 mt-1"></i>
+                            <span class="text-light">{{ err.message }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
             </div>
             <div class="modal-footer border-secondary pt-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
