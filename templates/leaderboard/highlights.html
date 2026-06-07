@@ -26,11 +26,20 @@
         </div>
     </div>
 
+    <!-- Pinned Highlights -->
+    {% with pinned_highlights=highlights|dictsortreversed:"is_pinned" %}
+    {% endwith %}
+
     <!-- Highlights Grid -->
     <div class="row g-3">
         {% for highlight in highlights %}
         <div class="col-md-6 col-lg-4">
-            <div class="highlight-card-full h-100">
+            <div class="highlight-card-full h-100 {% if highlight.is_pinned %}highlight-pinned-card{% endif %} {% if highlight.is_featured %}highlight-featured-card{% endif %}">
+                <!-- Pinned/Featured Badges -->
+                {% if highlight.is_pinned %}
+                <div class="pinned-ribbon"><i class="bi bi-pin-angle-fill"></i> 置顶</div>
+                {% endif %}
+
                 <!-- Header -->
                 <div class="d-flex align-items-center gap-2 mb-3">
                     <img src="{{ highlight.winner.get_avatar_url }}" class="player-avatar">
@@ -63,8 +72,15 @@
                 </div>
 
                 <!-- Title & Description -->
-                <div class="highlight-title mb-1">{{ highlight.title }}</div>
-                {% if highlight.description %}
+                <div class="highlight-title mb-1">{{ highlight.get_display_title }}</div>
+                {% if highlight.featured_note %}
+                <div class="highlight-featured-note mb-1">
+                    <i class="bi bi-chat-quote"></i> {{ highlight.featured_note }}
+                </div>
+                {% endif %}
+                {% if highlight.description and not highlight.featured_title %}
+                <div class="highlight-desc text-muted small">{{ highlight.description }}</div>
+                {% elif highlight.description %}
                 <div class="highlight-desc text-muted small">{{ highlight.description }}</div>
                 {% endif %}
 
@@ -94,6 +110,18 @@
                             <i class="bi bi-heart{% if highlight.pk in collected_ids %}-fill text-danger{% endif %}"></i>
                             <span class="collect-count">{{ highlight.collected_by.count }}</span>
                         </button>
+                        {% endif %}
+                        {% if is_staff %}
+                        <div class="btn-group ms-1">
+                            <button class="btn btn-sm {% if highlight.is_featured %}btn-warning{% else %}btn-outline-secondary{% endif %}"
+                                    onclick="toggleFeatured({{ highlight.pk }}, this)" title="精选">
+                                <i class="bi bi-star{% if highlight.is_featured %}-fill{% endif %}"></i>
+                            </button>
+                            <button class="btn btn-sm {% if highlight.is_pinned %}btn-danger{% else %}btn-outline-secondary{% endif %}"
+                                    onclick="togglePinned({{ highlight.pk }}, this)" title="置顶">
+                                <i class="bi bi-pin-angle{% if highlight.is_pinned %}-fill{% endif %}"></i>
+                            </button>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -142,6 +170,54 @@ async function shareHighlight(title, url) {
     } catch (_) {
         prompt('复制以下链接分享：', url);
     }
+}
+
+async function toggleFeatured(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/featured/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    if (data.error) {
+        showToast(data.error, 'error');
+        return;
+    }
+    const icon = btn.querySelector('i');
+    if (data.is_featured) {
+        btn.className = 'btn btn-sm btn-warning';
+        icon.className = 'bi bi-star-fill';
+    } else {
+        btn.className = 'btn btn-sm btn-outline-secondary';
+        icon.className = 'bi bi-star';
+    }
+    // Reload page after short delay to reflect reordering
+    setTimeout(() => location.reload(), 500);
+}
+
+async function togglePinned(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/pinned/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    if (data.error) {
+        showToast(data.error, 'error');
+        return;
+    }
+    const icon = btn.querySelector('i');
+    if (data.is_pinned) {
+        btn.className = 'btn btn-sm btn-danger';
+        icon.className = 'bi bi-pin-angle-fill';
+    } else {
+        btn.className = 'btn btn-sm btn-outline-secondary';
+        icon.className = 'bi bi-pin-angle';
+    }
+    // Reload page after short delay to reflect reordering
+    setTimeout(() => location.reload(), 500);
 }
 </script>
 {% endblock %}

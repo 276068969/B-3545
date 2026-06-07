@@ -202,6 +202,14 @@ class Highlight(models.Model):
     is_domination = models.BooleanField('是否全场通吃', default=False)
     domination_score = models.IntegerField('通吃分数', default=0)
     is_featured = models.BooleanField('精选', default=False)
+    is_pinned = models.BooleanField('置顶', default=False, help_text='置顶的高光会排在最前面')
+    featured_title = models.CharField('精选标题', max_length=100, blank=True, help_text='管理员自定义的精选标题，留空则使用原标题')
+    featured_note = models.TextField('精选说明', blank=True, help_text='管理员补充的精选说明文字')
+    featured_at = models.DateTimeField('精选时间', null=True, blank=True)
+    featured_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='featured_highlights', verbose_name='精选操作人'
+    )
     collected_by = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True,
         through='HighlightCollection',
@@ -212,10 +220,13 @@ class Highlight(models.Model):
     class Meta:
         verbose_name = '高光时刻'
         verbose_name_plural = '高光时刻列表'
-        ordering = ['-highlight_score', '-created_at']
+        ordering = ['-is_pinned', '-is_featured', '-highlight_score', '-created_at']
 
     def __str__(self):
-        return self.title
+        return self.get_display_title()
+
+    def get_display_title(self):
+        return self.featured_title or self.title
 
 
 class PlayerStats(models.Model):

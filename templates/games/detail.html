@@ -36,6 +36,71 @@
         {% endif %}
     </div>
 
+    <!-- Pattern Summary Card -->
+    <div class="card-dark mb-4 pattern-summary-card">
+        <div class="card-header-dark">
+            <h6 class="mb-0">
+                <i class="bi bi-grid-3x3-gap-fill text-gold"></i>
+                牌型摘要
+                <span class="text-muted small ms-2">— 本局亮点一览</span>
+            </h6>
+            <a href="#pattern-details" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-down"></i> 查看详情
+            </a>
+        </div>
+        <div class="card-body-dark">
+            <div class="row g-3">
+                {% for item in pattern_summary %}
+                <div class="col-md-6 col-lg-3">
+                    <div class="pattern-summary-item h-100 {% if item.player.is_winner %}winner{% endif %}">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div class="result-rank rank-{{ item.player.rank }}">{{ item.player.rank }}</div>
+                            <img src="{{ item.player.user.get_avatar_url }}" class="mini-avatar">
+                            <div class="flex-grow-1">
+                                <div class="pattern-summary-name">
+                                    {{ item.player.user.get_display_name }}
+                                    {% if item.player.is_winner %}
+                                    <i class="bi bi-crown-fill text-gold ms-1"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="pattern-summary-score {% if item.player.score > 0 %}text-win{% elif item.player.score < 0 %}text-loss{% else %}text-muted{% endif %}">
+                                    {{ item.player.score|stringformat:"+d" }} 分
+                                </div>
+                            </div>
+                        </div>
+                        {% if item.pattern_count > 0 %}
+                        <div class="pattern-summary-stats mb-2">
+                            <span class="stat-chip">
+                                <i class="bi bi-tiles"></i> {{ item.pattern_count }} 个牌型
+                            </span>
+                            <span class="stat-chip">
+                                <i class="bi bi-arrow-down-circle text-info"></i> {{ item.self_draw_count }} 次自摸
+                            </span>
+                            <span class="stat-chip">
+                                <i class="bi bi-star text-gold"></i> {{ item.total_fan }} 番
+                            </span>
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for p in item.patterns|slice:":3" %}
+                            <span class="pattern-display-tag" title="{{ p.tile_pattern.description }}">
+                                {{ p.tile_pattern.name }}
+                                {% if p.is_self_draw %}<i class="bi bi-arrow-down-circle ms-1 text-info"></i>{% endif %}
+                            </span>
+                            {% endfor %}
+                            {% if item.pattern_count > 3 %}
+                            <span class="pattern-more-tag">+{{ item.pattern_count|add:"-3" }}</span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="text-muted small">本局无牌型记录</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
     <div class="row g-4">
         <!-- Player Scores -->
         <div class="col-lg-5">
@@ -103,31 +168,61 @@
 
             <!-- Highlights -->
             {% if highlights %}
-            <div class="card-dark mb-4">
+            <div class="card-dark mb-4 highlight-section-card" id="highlights-section">
                 <div class="card-header-dark">
-                    <h6 class="mb-0"><i class="bi bi-stars text-gold"></i> 本局高光时刻</h6>
+                    <h6 class="mb-0">
+                        <i class="bi bi-stars text-gold"></i>
+                        本局高光时刻
+                        <span class="badge bg-warning text-dark ms-2">{{ highlights|length }} 条</span>
+                    </h6>
+                    <a href="/leaderboard/highlights/" class="btn btn-sm btn-outline-gold">
+                        <i class="bi bi-collection"></i> 全部高光
+                    </a>
                 </div>
                 <div class="card-body-dark">
                     {% for h in highlights %}
-                    <div class="highlight-item p-2 mb-2 rounded">
+                    <div class="highlight-item p-2 mb-2 rounded {% if h.is_pinned %}highlight-pinned{% endif %} {% if h.is_featured %}highlight-featured{% endif %}">
                         <div class="d-flex align-items-center gap-2">
+                            {% if h.is_pinned %}
+                            <span class="badge bg-danger" title="置顶"><i class="bi bi-pin-angle-fill"></i></span>
+                            {% endif %}
+                            {% if h.is_featured %}
+                            <span class="badge bg-warning text-dark" title="精选"><i class="bi bi-star-fill"></i> 精选</span>
+                            {% endif %}
                             <span class="badge badge-highlight-type">{{ h.get_highlight_type_display }}</span>
-                            <span class="text-light">{{ h.title }}</span>
+                            <span class="text-light">{{ h.get_display_title }}</span>
                             <span class="ms-auto highlight-score-sm">{{ h.highlight_score }}分</span>
                         </div>
+                        {% if h.featured_note %}
+                        <div class="highlight-featured-note mt-1">
+                            <i class="bi bi-chat-quote"></i> {{ h.featured_note }}
+                        </div>
+                        {% endif %}
                         {% if h.description %}
                         <div class="text-muted small mt-1">{{ h.description }}</div>
                         {% endif %}
-                        {% if user.is_authenticated %}
-                        <div class="mt-1">
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            {% if user.is_authenticated %}
                             <button class="btn btn-sm btn-outline-secondary collect-btn" 
                                     data-id="{{ h.pk }}"
                                     onclick="collectHighlight({{ h.pk }}, this)">
                                 <i class="bi bi-heart{% if user in h.collected_by.all %}-fill text-danger{% endif %}"></i>
                                 <span class="collect-count">{{ h.collected_by.count }}</span>
                             </button>
+                            {% endif %}
+                            {% if is_staff %}
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm {% if h.is_featured %}btn-warning{% else %}btn-outline-secondary{% endif %}"
+                                        onclick="toggleFeatured({{ h.pk }}, this)" title="精选">
+                                    <i class="bi bi-star{% if h.is_featured %}-fill{% endif %}"></i>
+                                </button>
+                                <button class="btn btn-sm {% if h.is_pinned %}btn-danger{% else %}btn-outline-secondary{% endif %}"
+                                        onclick="togglePinned({{ h.pk }}, this)" title="置顶">
+                                    <i class="bi bi-pin-angle{% if h.is_pinned %}-fill{% endif %}"></i>
+                                </button>
+                            </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -135,23 +230,23 @@
             {% endif %}
 
             <!-- Pattern Statistics -->
-            {% if players %}
-            {% with all_patterns=players %}
-            <div class="card-dark">
+            <div class="card-dark" id="pattern-details">
                 <div class="card-header-dark">
-                    <h6 class="mb-0"><i class="bi bi-grid text-gold"></i> 牌型记录</h6>
+                    <h6 class="mb-0"><i class="bi bi-grid text-gold"></i> 牌型记录详情</h6>
                 </div>
                 <div class="card-body-dark">
                     {% for gp in players %}
                     {% if gp.patterns.all %}
                     <div class="mb-3">
                         <div class="d-flex align-items-center gap-2 mb-2">
+                            <div class="result-rank rank-{{ gp.rank }}">{{ gp.rank }}</div>
                             <img src="{{ gp.user.get_avatar_url }}" class="mini-avatar">
                             <span class="text-light fw-bold">{{ gp.user.get_display_name }}</span>
+                            <span class="text-muted small">({{ gp.patterns.all|length }} 个牌型)</span>
                         </div>
                         {% for pr in gp.patterns.all %}
                         <div class="pattern-detail-row p-2 mb-1 rounded">
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <span class="pattern-display-tag">{{ pr.tile_pattern.name }}</span>
                                 <span class="text-muted small">{{ pr.tile_pattern.fan_count }}番</span>
                                 {% if pr.is_self_draw %}
@@ -165,22 +260,26 @@
                                 {% if pr.consecutive_dealer %}
                                 <span class="badge bg-warning text-dark">连庄{{ pr.consecutive_dealer }}次</span>
                                 {% endif %}
+                                {% if pr.zhongma_count %}
+                                <span class="badge bg-success">中码{{ pr.zhongma_count }}个</span>
+                                {% endif %}
                             </div>
+                            {% if pr.notes %}
+                            <div class="text-muted small mt-1"><i class="bi bi-chat-text"></i> {{ pr.notes }}</div>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
                     {% endif %}
                     {% endfor %}
-                    {% if not players|length %}
-                    <div class="text-muted text-center py-2">本局无牌型记录</div>
-                    {% endif %}
                     {% with has_patterns=False %}
                     {% for gp in players %}{% if gp.patterns.all %}{% with has_patterns=True %}{% endwith %}{% endif %}{% endfor %}
+                    {% if not has_patterns %}
+                    <div class="text-muted text-center py-2">本局无牌型记录</div>
+                    {% endif %}
                     {% endwith %}
                 </div>
             </div>
-            {% endwith %}
-            {% endif %}
         </div>
     </div>
 </div>
@@ -244,6 +343,42 @@ async function collectHighlight(id, btn) {
     const count = btn.querySelector('.collect-count');
     icon.className = data.collected ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
     count.textContent = data.count;
+}
+
+async function toggleFeatured(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/featured/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    const icon = btn.querySelector('i');
+    if (data.is_featured) {
+        btn.className = 'btn btn-sm btn-warning';
+        icon.className = 'bi bi-star-fill';
+    } else {
+        btn.className = 'btn btn-sm btn-outline-secondary';
+        icon.className = 'bi bi-star';
+    }
+}
+
+async function togglePinned(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/pinned/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    const icon = btn.querySelector('i');
+    if (data.is_pinned) {
+        btn.className = 'btn btn-sm btn-danger';
+        icon.className = 'bi bi-pin-angle-fill';
+    } else {
+        btn.className = 'btn btn-sm btn-outline-secondary';
+        icon.className = 'bi bi-pin-angle';
+    }
 }
 </script>
 {% endblock %}

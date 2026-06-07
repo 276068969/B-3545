@@ -65,8 +65,8 @@ def game_list(request):
 
 def game_detail(request, pk):
     game = get_object_or_404(Game, pk=pk)
-    players = game.players.select_related('user').prefetch_related('patterns__tile_pattern').order_by('-score')
-    highlights = game.highlights.all()
+    players = game.players.select_related('user').prefetch_related('patterns__tile_pattern', 'patterns__shooter').order_by('-score')
+    highlights = game.highlights.select_related('winner').all()
     snapshots = game.snapshots.select_related('player').order_by('round_number')
 
     # Prepare chart data
@@ -76,15 +76,35 @@ def game_detail(request, pk):
         'scores': [p.score for p in players],
     }
 
+    # Build pattern summary for each player
+    pattern_summary = []
+    for gp in players:
+        patterns = gp.patterns.select_related('tile_pattern', 'shooter').all()
+        pattern_names = [p.tile_pattern.name for p in patterns]
+        self_draw_count = sum(1 for p in patterns if p.is_self_draw)
+        total_fan = sum(p.tile_pattern.fan_count for p in patterns)
+        pattern_summary.append({
+            'player': gp,
+            'patterns': patterns,
+            'pattern_names': pattern_names,
+            'pattern_count': len(patterns),
+            'self_draw_count': self_draw_count,
+            'total_fan': total_fan,
+        })
+
+    is_staff = request.user.is_authenticated and request.user.is_staff
+
     context = {
         'game': game,
         'players': players,
         'highlights': highlights,
         'snapshots': snapshots,
         'score_data': json.dumps(score_data),
+        'pattern_summary': pattern_summary,
         'can_edit': request.user.is_authenticated and (
             game.creator == request.user or request.user.is_staff
         ),
+        'is_staff': is_staff,
     }
     return render(request, 'games/detail.html', context)
 
@@ -439,6 +459,40 @@ def collect_highlight(request, pk):
         HighlightCollection.objects.create(highlight=highlight, user=request.user)
         collected = True
     return JsonResponse({'collected': collected, 'count': highlight.collected_by.count()})
+
+
+@login_required
+@require_POST
+def toggle_highlight_featured(request, pk):
+    """管理员切换高光精选状态"""
+    if not request.user.is_staff:
+        return JsonResponse({'error': '无权限操作'}, status=403)
+    from django.utils import timezone
+    highlight = get_object_or_404(Highlight, pk=pk)
+    highlight.is_featured = not highlight.is_featured
+    if highlight.is_featured:
+        highlight.featured_at = timezone.now()
+        highlight.featured_by = request.user
+    else:
+        highlight.featured_at = None
+        highlight.featured_by = None
+    highlight.save()
+    return JsonResponse({
+        'is_featured': highlight.is_featured,
+        'featured_by': highlight.featured_by.get_display_name() if highlight.featured_by else None,
+    })
+
+
+@login_required
+@require_POST
+def toggle_highlight_pinned(request, pk):
+    """管理员切换高光置顶状态"""
+    if not request.user.is_staff:
+        return JsonResponse({'error': '无权限操作'}, status=403)
+    highlight = get_object_or_404(Highlight, pk=pk)
+    highlight.is_pinned = not highlight.is_pinned
+    highlight.save()
+    return JsonResponse({'is_pinned': highlight.is_pinned})
 
 
 @login_required

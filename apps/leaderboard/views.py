@@ -352,13 +352,13 @@ def highlights_board(request):
         highlights_qs = highlights_qs.filter(highlight_type=highlight_type)
 
     if sort_by == 'time':
-        highlights_qs = highlights_qs.order_by('-created_at')
+        highlights_qs = highlights_qs.order_by('-is_pinned', '-is_featured', '-created_at')
     elif sort_by == 'collected':
         highlights_qs = highlights_qs.annotate(
             collect_count=Count('collected_by')
-        ).order_by('-collect_count')
+        ).order_by('-is_pinned', '-is_featured', '-collect_count')
     else:
-        highlights_qs = highlights_qs.order_by('-highlight_score', '-created_at')
+        highlights_qs = highlights_qs.order_by('-is_pinned', '-is_featured', '-highlight_score', '-created_at')
 
     highlights = highlights_qs[:100]
 
@@ -369,12 +369,16 @@ def highlights_board(request):
             Highlight.objects.filter(collected_by=request.user).values_list('id', flat=True)
         )
 
+    # Check if user is staff for admin actions
+    is_staff = request.user.is_authenticated and request.user.is_staff
+
     context = {
         'highlights': highlights,
         'sort_by': sort_by,
         'highlight_type': highlight_type,
         'highlight_type_choices': Highlight.HIGHLIGHT_TYPE_CHOICES,
         'collected_ids': collected_ids,
+        'is_staff': is_staff,
     }
     return render(request, 'leaderboard/highlights.html', context)
 
