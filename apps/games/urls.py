@@ -1,0 +1,20 @@
+from django.urls import path
+from . import views
+
+app_name = 'games'
+
+urlpatterns = [
+    path('', views.game_list, name='list'),
+    path('create/', views.create_game, name='create'),
+    path('<int:pk>/', views.game_detail, name='detail'),
+    path('<int:pk>/edit/', views.edit_game, name='edit'),
+    path('<int:pk>/delete/', views.delete_game, name='delete'),
+    path('<int:game_pk>/snapshot/', views.add_snapshot, name='snapshot'),
+    path('batch-delete/', views.batch_delete_games, name='batch_delete'),
+    path('backup/', views.backup_data, name='backup'),
+    path('restore/', views.restore_data, name='restore'),
+    path('import/', views.import_games, name='import'),
+    path('import/template/', views.download_template, name='download_template'),
+    path('export/', views.export_games, name='export'),
+    path('highlights/<int:pk>/collect/', views.collect_highlight, name='collect_highlight'),
+]

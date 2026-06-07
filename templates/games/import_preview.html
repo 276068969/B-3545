@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}预览导入数据{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-eye text-gold"></i> 数据预览</h3>
+    </div>
+
+    <!-- Stats row -->
+    <div class="d-flex gap-3 mb-4 flex-wrap">
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-gold fs-4 fw-bold">{{ total }}</div>
+            <div class="text-muted small">有效数据</div>
+        </div>
+        {% if error_count %}
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-warning fs-4 fw-bold">{{ error_count }}</div>
+            <div class="text-muted small">错误行（将跳过）</div>
+        </div>
+        <button type="button" class="btn btn-outline-warning align-self-center"
+                data-bs-toggle="modal" data-bs-target="#previewErrorModal">
+            <i class="bi bi-exclamation-triangle me-1"></i>查看错误详情
+        </button>
+        {% endif %}
+    </div>
+
+    {% if total == 0 %}
+    <div class="card-dark p-4 text-center mb-4">
+        <i class="bi bi-file-earmark-x fs-1 text-warning"></i>
+        <p class="mt-3 text-light">文件中没有可导入的有效数据</p>
+        <p class="text-muted small">请确保用户名与系统中的账号完全一致，且每行得分之和为 0</p>
+        <a href="/games/import/" class="btn btn-gold mt-2">重新选择文件</a>
+    </div>
+    {% else %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark">
+            <h6 class="mb-0">
+                <i class="bi bi-table text-gold"></i>
+                共 <span class="text-gold">{{ total }}</span> 条有效数据
+            </h6>
+        </div>
+        <div class="card-body-dark p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>时间</th>
+                            <th>地点</th>
+                            <th>类型</th>
+                            <th>底分</th>
+                            <th>玩家得分</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for game in preview_data %}
+                        <tr>
+                            <td class="text-muted">{{ forloop.counter }}</td>
+                            <td>{{ game.game_time|slice:":16"|cut:"T" }}</td>
+                            <td>{{ game.location|default:"-" }}</td>
+                            <td>{{ game.game_type }}</td>
+                            <td>{{ game.base_score }}</td>
+                            <td>
+                                {% for player in game.players %}
+                                <span class="player-score-tag {% if player.score > 0 %}winner{% elif player.score < 0 %}loser{% endif %}">
+                                    {{ player.display_name }}: {{ player.score|stringformat:"+d" }}
+                                </span>
+                                {% endfor %}
+                            </td>
+                            <td class="text-muted">{{ game.notes|default:"-"|truncatechars:20 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" action="/games/import/">
+        {% csrf_token %}
+        <div class="d-flex gap-3">
+            <button type="submit" class="btn btn-gold btn-lg">
+                <i class="bi bi-cloud-upload"></i> 确认导入 {{ total }} 条数据
+            </button>
+            <a href="/games/import/" class="btn btn-outline-secondary btn-lg">重新选择文件</a>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+{% if errors %}
+<!-- Error Modal -->
+<div class="modal fade" id="previewErrorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:520px">
+        <div class="modal-content" style="background:#1a2f3e;border:1px solid #2d4a5e">
+            <div class="modal-header border-secondary pb-2">
+                <h6 class="modal-title text-warning mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>{{ error_count }} 个错误（这些行将被跳过）
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="text-muted small mb-3">
+                    常见原因：用户名不存在（须与系统注册账号完全一致）、得分总和不为 0、时间格式错误。
+                </p>
+                <ul class="list-unstyled mb-0">
+                    {% for err in errors %}
+                    <li class="py-1 border-bottom border-secondary d-flex gap-2 align-items-start" style="font-size:13px">
+                        <i class="bi bi-x-circle text-danger flex-shrink-0 mt-1"></i>
+                        <span class="text-light">{{ err }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="modal-footer border-secondary pt-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if total == 0 and errors %}
+// Auto-show errors when nothing imported
+document.addEventListener('DOMContentLoaded', function() {
+    var m = document.getElementById('previewErrorModal');
+    if (m) new bootstrap.Modal(m).show();
+});
+{% endif %}
+</script>
+{% endblock %}

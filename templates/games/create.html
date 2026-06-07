@@ -1,0 +1,314 @@
+{% extends 'base.html' %}
+{% block title %}录入战绩{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0">
+            <i class="bi bi-plus-circle text-gold"></i>
+            {% if room %}
+            在 <span class="text-gold">{{ room.name }}</span> 录入战绩
+            {% else %}
+            录入新战绩
+            {% endif %}
+        </h3>
+        {% if room %}
+        <a href="/rooms/{{ room.pk }}/" class="btn btn-sm btn-outline-secondary mt-2">
+            <i class="bi bi-arrow-left"></i> 返回房间
+        </a>
+        {% endif %}
+    </div>
+
+    <form method="post" id="gameForm" novalidate>
+        {% csrf_token %}
+        {% if room %}<input type="hidden" name="room_id" value="{{ room.pk }}">{% endif %}
+
+        <div class="row g-4">
+            <!-- Game Info -->
+            <div class="col-lg-4">
+                <div class="card-dark">
+                    <div class="card-header-dark">
+                        <h6 class="mb-0"><i class="bi bi-info-circle text-gold"></i> 游戏信息</h6>
+                    </div>
+                    <div class="card-body-dark">
+                        {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label text-light">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}
+                            <div class="text-danger small">{{ field.errors|join:", " }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Player Scores -->
+            <div class="col-lg-8">
+                <div class="card-dark">
+                    <div class="card-header-dark">
+                        <h6 class="mb-0"><i class="bi bi-people text-gold"></i> 玩家得分（2-4人）</h6>
+                        <div class="score-balance" id="scoreBalance">
+                            分值合计: <span id="balanceValue" class="fw-bold">0</span>
+                            <span id="balanceStatus" class="ms-2"></span>
+                        </div>
+                    </div>
+                    <div class="card-body-dark">
+                        <!-- Player Selection -->
+                        <div class="mb-3">
+                            <label class="form-label text-light">选择玩家</label>
+                            <div class="d-flex gap-2 align-items-center">
+                                <select class="form-select flex-grow-1" id="playerSelect">
+                                    <option value="">-- 选择玩家 --</option>
+                                    {% for user_opt in all_users %}
+                                    <option value="{{ user_opt.pk }}" data-name="{{ user_opt.get_display_name }}" data-avatar="{{ user_opt.get_avatar_url }}">
+                                        {{ user_opt.get_display_name }} (@{{ user_opt.username }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" class="btn btn-outline-gold flex-shrink-0" onclick="addPlayer()">
+                                    <i class="bi bi-plus-circle"></i> 添加
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Players Container -->
+                        <div id="playersContainer">
+                            {% if room_members %}
+                            {% for member in room_members %}
+                            <div class="player-entry" id="player_{{ member.user.pk }}" data-user-id="{{ member.user.pk }}">
+                                <input type="hidden" name="player_ids" value="{{ member.user.pk }}">
+                                <div class="d-flex align-items-center gap-3 p-3 rounded bg-card-inner mb-2">
+                                    <img src="{{ member.user.get_avatar_url }}" class="player-entry-avatar">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold text-light">{{ member.user.get_display_name }}</div>
+                                        <div class="text-muted small">@{{ member.user.username }}</div>
+                                    </div>
+                                    <div class="score-input-wrapper">
+                                        <input type="number" name="scores" class="form-control score-input"
+                                               placeholder="得分" required onchange="updateBalance()" oninput="updateBalance()">
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePlayer('{{ member.user.pk }}')">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                                <!-- Pattern Selection -->
+                                <div class="pattern-section ms-4 mb-3" id="patterns_{{ member.user.pk }}">
+                                    <div class="text-muted small mb-1">
+                                        <i class="bi bi-grid text-gold"></i> 牌型记录（可选）
+                                        <button type="button" class="btn btn-sm btn-link text-gold p-0 ms-2"
+                                                data-bs-toggle="collapse" data-bs-target="#patternsList_{{ member.user.pk }}">
+                                            展开
+                                        </button>
+                                    </div>
+                                    <div class="collapse" id="patternsList_{{ member.user.pk }}">
+                                        {% for category, patterns in tile_patterns_by_category.items %}
+                                        <div class="mb-2">
+                                            <div class="text-muted small mb-1">{{ category }}</div>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                {% for pattern in patterns %}
+                                                <label class="pattern-tag">
+                                                    <input type="checkbox" name="patterns_{{ member.user.pk }}"
+                                                           value="{{ pattern.pk }}" class="d-none pattern-check">
+                                                    <span class="pattern-label" data-rarity="{{ pattern.rarity_score }}">
+                                                        {{ pattern.name }}
+                                                        <span class="fan-badge">{{ pattern.fan_count }}番</span>
+                                                    </span>
+                                                </label>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+
+                        <!-- Score balance info -->
+                        <div class="alert alert-info-dark mt-3" id="scoreHint">
+                            <i class="bi bi-info-circle"></i>
+                            麻将游戏所有玩家得分之和必须为0。赢家得正分，输家得负分。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tile Pattern Template (hidden) -->
+                <div class="d-none" id="patternTemplate">
+                    <div class="collapse" id="patternsList___UID__">
+                        {% for category, patterns in tile_patterns_by_category.items %}
+                        <div class="mb-2">
+                            <div class="text-muted small mb-1">{{ category }}</div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for pattern in patterns %}
+                                <label class="pattern-tag">
+                                    <input type="checkbox" name="patterns___UID__"
+                                           value="{{ pattern.pk }}" class="d-none pattern-check">
+                                    <span class="pattern-label" data-rarity="{{ pattern.rarity_score }}">
+                                        {{ pattern.name }}
+                                        <span class="fan-badge">{{ pattern.fan_count }}番</span>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="d-flex gap-3 mt-4">
+                    <button type="submit" class="btn btn-gold btn-lg flex-grow-1" id="submitBtn">
+                        <i class="bi bi-check-circle"></i> 提交战绩
+                    </button>
+                    <a href="/games/" class="btn btn-outline-secondary btn-lg">取消</a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Player Entry Template -->
+<template id="playerEntryTemplate">
+    <div class="player-entry" id="player___UID__" data-user-id="__UID__">
+        <input type="hidden" name="player_ids" value="__UID__">
+        <div class="d-flex align-items-center gap-3 p-3 rounded bg-card-inner mb-2">
+            <img src="__AVATAR__" class="player-entry-avatar">
+            <div class="flex-grow-1">
+                <div class="fw-bold text-light">__NAME__</div>
+            </div>
+            <div class="score-input-wrapper">
+                <input type="number" name="scores" class="form-control score-input"
+                       placeholder="得分" required onchange="updateBalance()" oninput="updateBalance()">
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePlayer('__UID__')">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div class="pattern-section ms-4 mb-3">
+            <div class="text-muted small mb-1">
+                <i class="bi bi-grid text-gold"></i> 牌型记录（可选）
+                <button type="button" class="btn btn-sm btn-link text-gold p-0 ms-2"
+                        data-bs-toggle="collapse" data-bs-target="#patternsList___UID__">
+                    展开
+                </button>
+            </div>
+            __PATTERNS__
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const allUsers = {
+    {% for u in all_users %}
+    '{{ u.pk }}': {name: '{{ u.get_display_name }}', avatar: '{{ u.get_avatar_url }}'},
+    {% endfor %}
+};
+
+const patternTemplate = document.getElementById('patternTemplate').innerHTML;
+
+function addPlayer() {
+    const select = document.getElementById('playerSelect');
+    const userId = select.value;
+    if (!userId) { showAlert('请先选择一名玩家'); return; }
+
+    const existingPlayers = document.querySelectorAll('.player-entry');
+    if (existingPlayers.length >= 4) { showAlert('最多添加 4 名玩家'); return; }
+
+    if (document.getElementById('player_' + userId)) {
+        showAlert('该玩家已添加'); return;
+    }
+
+    const user = allUsers[userId];
+    const template = document.getElementById('playerEntryTemplate');
+    let html = template.innerHTML
+        .replace(/__UID__/g, userId)
+        .replace(/__NAME__/g, user.name)
+        .replace(/__AVATAR__/g, user.avatar)
+        .replace(/__PATTERNS__/g, patternTemplate.replace(/__UID__/g, userId));
+
+    const container = document.getElementById('playersContainer');
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    container.appendChild(div.firstElementChild);
+
+    // Bind pattern checkbox clicks
+    bindPatternClicks();
+    updateBalance();
+    select.value = '';
+}
+
+function removePlayer(userId) {
+    const el = document.getElementById('player_' + userId);
+    if (el) el.remove();
+    updateBalance();
+}
+
+function updateBalance() {
+    const inputs = document.querySelectorAll('.score-input');
+    let total = 0;
+    let allFilled = true;
+    inputs.forEach(inp => {
+        const val = parseFloat(inp.value);
+        if (!isNaN(val)) total += val;
+        else allFilled = false;
+    });
+    const balanceEl = document.getElementById('balanceValue');
+    const statusEl = document.getElementById('balanceStatus');
+    balanceEl.textContent = total;
+    if (total === 0 && inputs.length >= 2 && allFilled) {
+        balanceEl.style.color = '#2ecc71';
+        statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i> 平衡</span>';
+    } else {
+        balanceEl.style.color = total !== 0 ? '#e74c3c' : '#aaa';
+        statusEl.innerHTML = total !== 0 ? '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> 需要为0</span>' : '';
+    }
+}
+
+function bindPatternClicks() {
+    document.querySelectorAll('.pattern-check').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const label = this.parentElement.querySelector('.pattern-label');
+            if (this.checked) {
+                label.classList.add('selected');
+            } else {
+                label.classList.remove('selected');
+            }
+        });
+    });
+}
+
+document.getElementById('gameForm').addEventListener('submit', function(e) {
+    const players = document.querySelectorAll('.player-entry');
+    if (players.length < 2) {
+        e.preventDefault();
+        showAlert('至少需要添加 2 名玩家');
+        return;
+    }
+    const inputs = document.querySelectorAll('.score-input');
+    let total = 0;
+    let allFilled = true;
+    inputs.forEach(inp => {
+        const val = parseFloat(inp.value);
+        if (isNaN(val)) allFilled = false;
+        else total += val;
+    });
+    if (!allFilled) {
+        e.preventDefault();
+        showAlert('请填写所有玩家的得分');
+        return;
+    }
+    if (total !== 0) {
+        e.preventDefault();
+        showAlert('所有玩家得分之和必须为 0，当前合计为 <strong>' + total + '</strong>');
+        return;
+    }
+});
+
+bindPatternClicks();
+updateBalance();
+</script>
+{% endblock %}

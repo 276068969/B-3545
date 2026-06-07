@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+{% block title %}战绩列表{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h3 class="mb-0"><i class="bi bi-journal-text text-gold"></i> 战绩列表</h3>
+            <div class="d-flex gap-2">
+                {% if user.is_authenticated %}
+                <a href="/games/create/" class="btn btn-gold"><i class="bi bi-plus-circle"></i> 录入战绩</a>
+                <a href="/games/import/" class="btn btn-outline-gold"><i class="bi bi-upload"></i> 批量导入</a>
+                {% endif %}
+                <div class="btn-group">
+                    <a href="/games/export/?{{ request.GET.urlencode }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-file-earmark-excel"></i> Excel
+                    </a>
+                    <a href="/games/export/?{{ request.GET.urlencode }}&format=pdf" class="btn btn-outline-secondary">
+                        <i class="bi bi-file-earmark-pdf"></i> PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="card-dark mb-4">
+        <div class="card-header-dark" style="cursor:pointer" data-bs-toggle="collapse" data-bs-target="#filterCollapse">
+            <h6 class="mb-0">
+                <i class="bi bi-funnel text-gold"></i> 筛选条件
+                <i class="bi bi-chevron-down ms-2 small"></i>
+            </h6>
+        </div>
+        <div class="collapse show" id="filterCollapse">
+            <div class="card-body-dark">
+                <form method="get" id="filterForm">
+                    <div class="row g-2">
+                        <div class="col-6 col-md-3">
+                            {{ filter_form.date_range.label_tag }}
+                            {{ filter_form.date_range }}
+                        </div>
+                        <div class="col-6 col-md-2 date-custom-field" id="dateFromField" style="display:none">
+                            {{ filter_form.date_from.label_tag }}
+                            {{ filter_form.date_from }}
+                        </div>
+                        <div class="col-6 col-md-2 date-custom-field" id="dateToField" style="display:none">
+                            {{ filter_form.date_to.label_tag }}
+                            {{ filter_form.date_to }}
+                        </div>
+                        <div class="col-6 col-md-2">
+                            {{ filter_form.player.label_tag }}
+                            {{ filter_form.player }}
+                        </div>
+                        <div class="col-6 col-md-2">
+                            {{ filter_form.game_type.label_tag }}
+                            {{ filter_form.game_type }}
+                        </div>
+                        <div class="col-6 col-md-2">
+                            {{ filter_form.is_supplemental.label_tag }}
+                            {{ filter_form.is_supplemental }}
+                        </div>
+                        <div class="col-12 col-md-3">
+                            {{ filter_form.search.label_tag }}
+                            {{ filter_form.search }}
+                        </div>
+                        <div class="col-auto d-flex align-items-end gap-2">
+                            <button type="submit" class="btn btn-gold btn-sm">
+                                <i class="bi bi-search"></i> 搜索
+                            </button>
+                            <a href="/games/" class="btn btn-outline-secondary btn-sm">重置</a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Actions -->
+    {% if user.is_authenticated %}
+    <form method="post" action="/games/batch-delete/" id="batchForm">
+        {% csrf_token %}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="text-muted small">
+                共 <span class="text-gold">{{ total_count }}</span> 条战绩
+                <span id="selectedCount" class="ms-2 text-gold d-none">（已选 <span id="selNum">0</span> 条）</span>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <label class="text-muted small d-flex align-items-center gap-1">
+                    <input type="checkbox" id="selectAll" class="form-check-input m-0"> 全选本页
+                </label>
+                <button type="button" class="btn btn-sm btn-outline-danger d-none" id="batchDeleteBtn"
+                        onclick="confirmBatchDelete()">
+                    <i class="bi bi-trash"></i> 批量删除
+                </button>
+            </div>
+        </div>
+    {% else %}
+    <div class="text-muted mb-3 small">
+        共 <span class="text-gold">{{ total_count }}</span> 条战绩
+    </div>
+    {% endif %}
+
+    <!-- Game List -->
+    <div class="row g-3">
+        {% for game in page_obj %}
+        <div class="col-12">
+            <div class="game-card p-3 d-flex gap-3 align-items-start">
+                {% if user.is_authenticated %}
+                <div class="flex-shrink-0 pt-1">
+                    <input type="checkbox" name="game_ids" value="{{ game.pk }}"
+                           class="game-checkbox form-check-input" style="width:18px;height:18px" title="选择">
+                </div>
+                {% endif %}
+                <div class="flex-grow-1 min-w-0">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                        <div>
+                            <a href="/games/{{ game.pk }}/" class="game-card-title">
+                                <i class="bi bi-calendar3 me-1"></i>{{ game.game_time|date:"Y年m月d日 H:i" }}
+                                {% if game.location %}
+                                <span class="text-muted ms-2"><i class="bi bi-geo-alt"></i> {{ game.location }}</span>
+                                {% endif %}
+                            </a>
+                            <div class="mt-1">
+                                <span class="badge bg-secondary me-1">{{ game.get_game_type_display }}</span>
+                                <span class="text-muted small">底分 {{ game.base_score }}元/分</span>
+                                {% if game.is_supplemental %}
+                                <span class="badge badge-supp ms-1">补录</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            {% if user.is_authenticated and game.creator == user or user.is_staff %}
+                            <a href="/games/{{ game.pk }}/edit/" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form method="post" action="/games/{{ game.pk }}/delete/" class="d-inline"
+                                  data-confirm="确认删除此条战绩？此操作不可撤销。">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mt-2 d-flex gap-2 flex-wrap">
+                        {% for gp in game.players.all %}
+                        <div class="player-score-card {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
+                            <img src="{{ gp.user.get_avatar_url }}" alt="{{ gp.user.get_display_name }}" class="mini-avatar">
+                            <span class="ms-1">{{ gp.user.get_display_name }}</span>
+                            <span class="ms-2 fw-bold">{{ gp.score|stringformat:"+d" }}</span>
+                            {% if gp.is_winner %}<i class="bi bi-crown-fill text-gold ms-1 small"></i>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {% if game.notes %}
+                    <div class="mt-2 text-muted small">
+                        <i class="bi bi-chat-text"></i> {{ game.notes|truncatechars:80 }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-journal-x fs-1"></i>
+                <p class="mt-3">没有找到符合条件的战绩</p>
+                {% if user.is_authenticated %}
+                <a href="/games/create/" class="btn btn-gold mt-2">立即录入战绩</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% if user.is_authenticated %}</form>{% endif %}
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if base_query %}&{{ base_query }}{% endif %}">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            </li>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+            </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if base_query %}&{{ base_query }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if base_query %}&{{ base_query }}{% endif %}">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% if import_errors %}
+<!-- Import Error Modal -->
+<div class="modal fade" id="importErrorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:520px">
+        <div class="modal-content" style="background:#1a2f3e;border:1px solid #2d4a5e">
+            <div class="modal-header border-secondary pb-2">
+                <h6 class="modal-title text-warning mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>导入结果
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-3">
+                {% if import_result %}
+                <div class="alert alert-warning py-2 mb-3" style="font-size:14px">{{ import_result }}</div>
+                {% endif %}
+                <p class="text-muted small mb-2">以下行因数据问题已跳过：</p>
+                <ul class="list-unstyled mb-0" style="max-height:300px;overflow-y:auto">
+                    {% for err in import_errors %}
+                    <li class="py-1 border-bottom border-secondary d-flex gap-2 align-items-start" style="font-size:13px">
+                        <i class="bi bi-x-circle text-danger flex-shrink-0 mt-1"></i>
+                        <span class="text-light">{{ err }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="modal-footer border-secondary pt-2">
+                <a href="/games/import/" class="btn btn-outline-gold btn-sm">重新导入</a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% block extra_js %}
+<script>
+{% if import_errors %}
+document.addEventListener('DOMContentLoaded', function() {
+    new bootstrap.Modal(document.getElementById('importErrorModal')).show();
+});
+{% endif %}
+
+const dateRangeSelect = document.querySelector('[name="date_range"]');
+const dateCustomFields = document.querySelectorAll('.date-custom-field');
+function toggleCustomDates() {
+    const show = dateRangeSelect.value === 'custom';
+    dateCustomFields.forEach(f => f.style.display = show ? '' : 'none');
+}
+if (dateRangeSelect) {
+    dateRangeSelect.addEventListener('change', toggleCustomDates);
+    toggleCustomDates();
+}
+
+function confirmBatchDelete() {
+    const n = document.querySelectorAll('.game-checkbox:checked').length;
+    showConfirm(`确认删除选中的 <strong>${n}</strong> 条战绩？此操作不可撤销。`, () => {
+        document.getElementById('batchForm').submit();
+    });
+}
+
+(function() {
+    const selectAll = document.getElementById('selectAll');
+    const batchBtn = document.getElementById('batchDeleteBtn');
+    const selCount = document.getElementById('selectedCount');
+    const selNum = document.getElementById('selNum');
+    if (!selectAll) return;
+
+    function updateBatch() {
+        const n = document.querySelectorAll('.game-checkbox:checked').length;
+        if (n > 0) {
+            batchBtn.classList.remove('d-none');
+            selCount.classList.remove('d-none');
+            selNum.textContent = n;
+        } else {
+            batchBtn.classList.add('d-none');
+            selCount.classList.add('d-none');
+        }
+    }
+
+    selectAll.addEventListener('change', function() {
+        document.querySelectorAll('.game-checkbox').forEach(cb => cb.checked = this.checked);
+        updateBatch();
+    });
+    document.querySelectorAll('.game-checkbox').forEach(cb => cb.addEventListener('change', updateBatch));
+})();
+</script>
+{% endblock %}

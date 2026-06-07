@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}数据备份与恢复{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:720px">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-shield-lock text-gold"></i> 数据备份与恢复</h3>
+        <p class="text-muted mt-1 mb-0 small">仅管理员可操作。备份格式为 JSON，包含所有已完成的战绩数据。</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Backup -->
+        <div class="col-md-6">
+            <div class="card-dark h-100">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-download text-gold"></i> 手动备份</h6>
+                </div>
+                <div class="card-body-dark">
+                    <p class="text-muted small">将所有战绩导出为 JSON 文件保存到本地，建议定期备份。</p>
+                    <a href="/games/backup/" class="btn btn-gold w-100">
+                        <i class="bi bi-cloud-download"></i> 下载备份文件
+                    </a>
+                    <hr class="border-secondary my-3">
+                    <a href="/games/export/" class="btn btn-outline-secondary w-100 mb-2">
+                        <i class="bi bi-file-earmark-excel"></i> 导出 Excel 备份
+                    </a>
+                    <a href="/games/export/?format=pdf" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-file-earmark-pdf"></i> 导出 PDF 备份
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Restore -->
+        <div class="col-md-6">
+            <div class="card-dark h-100">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-upload text-info"></i> 数据恢复</h6>
+                </div>
+                <div class="card-body-dark">
+                    <p class="text-muted small">从之前下载的 JSON 备份文件恢复战绩数据（仅补充不存在的记录，不覆盖）。</p>
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label text-muted small">选择备份文件（.json）</label>
+                            <input type="file" name="backup_file" accept=".json" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        </div>
+                        <button type="button" class="btn btn-info w-100"
+                                onclick="confirmRestore()">
+                            <i class="bi bi-arrow-counterclockwise"></i> 开始恢复
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 card-dark">
+        <div class="card-body-dark">
+            <h6 class="text-gold mb-2"><i class="bi bi-info-circle"></i> 注意事项</h6>
+            <ul class="text-muted small mb-0">
+                <li>备份文件包含游戏时间、地点、类型、参与玩家及得分信息</li>
+                <li>恢复时若备份中的用户名在系统中不存在，该条记录将被跳过</li>
+                <li>恢复操作不会删除现有数据，只会追加不重复的战绩</li>
+                <li>恢复完成后系统将自动重新计算所有玩家统计数据</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmRestore() {
+    const f = document.querySelector('input[name="backup_file"]');
+    if (!f || !f.files.length) { showAlert('请先选择备份文件。'); return; }
+    showConfirm('确认从备份文件恢复数据？<br><small class="text-muted">重复数据会被跳过，不影响现有战绩。</small>', () => {
+        f.closest('form').submit();
+    });
+}
+</script>
+{% endblock %}

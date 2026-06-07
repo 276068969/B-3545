@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}创建房间{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h5 class="mb-0"><i class="bi bi-plus-circle text-gold"></i> 创建游戏房间</h5>
+                </div>
+                <div class="card-body-dark">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label text-light">房间名称 *</label>
+                            <input type="text" name="name" class="form-control" placeholder="给房间起个名字..." required maxlength="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-light">游戏类型</label>
+                            <select name="game_type" class="form-select">
+                                {% for value, label in game_type_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col">
+                                <label class="form-label text-light">最大人数</label>
+                                <select name="max_players" class="form-select">
+                                    <option value="2">2人</option>
+                                    <option value="3">3人</option>
+                                    <option value="4" selected>4人</option>
+                                </select>
+                            </div>
+                            <div class="col">
+                                <label class="form-label text-light">底分（元/分）</label>
+                                <input type="number" name="base_score" class="form-control" value="1" min="1" max="1000">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-light">房间描述（可选）</label>
+                            <textarea name="description" class="form-control" rows="2" placeholder="描述一下这个房间..."></textarea>
+                        </div>
+                        <div class="d-flex gap-2 mt-4">
+                            <button type="submit" class="btn btn-gold flex-grow-1">
+                                <i class="bi bi-plus-circle"></i> 创建房间
+                            </button>
+                            <a href="/rooms/" class="btn btn-outline-secondary">取消</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}批量导入战绩{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-file-earmark-arrow-up text-gold"></i> 批量导入战绩</h3>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-upload text-gold"></i> 上传文件</h6>
+                </div>
+                <div class="card-body-dark">
+                    <div class="alert-info-dark p-3 rounded mb-4">
+                        <h6><i class="bi bi-info-circle text-gold"></i> 导入说明</h6>
+                        <ul class="mb-0 small text-muted">
+                            <li>支持 .xlsx / .xls 格式的Excel文件</li>
+                            <li>每行代表一场游戏，每列对应游戏信息</li>
+                            <li>玩家用户名必须为系统中已注册的用户名</li>
+                            <li>所有玩家得分之和必须为0</li>
+                            <li>导入的战绩会自动标记为"补录"</li>
+                        </ul>
+                    </div>
+
+                    <!-- Download Template -->
+                    <div class="mb-4">
+                        <a href="/games/import/template/" class="btn btn-outline-gold">
+                            <i class="bi bi-file-earmark-excel"></i> 下载导入模板
+                        </a>
+                    </div>
+
+                    <!-- Upload Form -->
+                    <form method="post" enctype="multipart/form-data" id="importForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label text-light">选择文件（Excel 或 CSV）</label>
+                            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                                <div class="upload-icon">
+                                    <i class="bi bi-cloud-upload fs-1 text-gold"></i>
+                                </div>
+                                <div class="text-light">点击选择文件 或 拖拽至此处</div>
+                                <div class="text-muted small mt-1">支持 .xlsx、.xls、.csv 格式，最大 10MB（CSV 请保存为 UTF-8 编码）</div>
+                                <div id="fileName" class="mt-2 text-gold"></div>
+                            </div>
+                            <input type="file" id="fileInput" name="file" accept=".xlsx,.xls,.csv"
+                                   class="d-none" onchange="showFileName(this)">
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" name="preview" value="1" class="btn btn-outline-gold">
+                                <i class="bi bi-eye"></i> 预览数据
+                            </button>
+                            <button type="submit" class="btn btn-gold">
+                                <i class="bi bi-cloud-upload"></i> 直接导入
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-table text-gold"></i> 模板格式说明</h6>
+                </div>
+                <div class="card-body-dark">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>列</th>
+                                    <th>字段</th>
+                                    <th>示例</th>
+                                </tr>
+                            </thead>
+                            <tbody class="small">
+                                <tr><td>A</td><td>游戏时间</td><td>2024-01-15 19:30</td></tr>
+                                <tr><td>B</td><td>地点</td><td>家里</td></tr>
+                                <tr><td>C</td><td>游戏类型</td><td>mahjong_16</td></tr>
+                                <tr><td>D</td><td>底分</td><td>1</td></tr>
+                                <tr><td>E</td><td>玩家1用户名</td><td>zhangsan</td></tr>
+                                <tr><td>F</td><td>玩家1得分</td><td>30</td></tr>
+                                <tr><td>G</td><td>玩家2用户名</td><td>lisi</td></tr>
+                                <tr><td>H</td><td>玩家2得分</td><td>-10</td></tr>
+                                <tr class="text-muted"><td>I-J</td><td>玩家3（可选）</td><td>...</td></tr>
+                                <tr class="text-muted"><td>K-L</td><td>玩家4（可选）</td><td>...</td></tr>
+                                <tr><td>M</td><td>备注</td><td>可选</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-3 small text-muted">
+                        游戏类型可选值：mahjong_16, mahjong_13, guangdong, sichuan, other
+                    </div>
+                    {% if all_users %}
+                    <div class="mt-3">
+                        <div class="text-muted small mb-1"><i class="bi bi-people me-1"></i>系统用户名（填入 E/G/I/K 列）：</div>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for u in all_users %}
+                            <code class="small px-2 py-1 rounded" style="background:#0d2030;color:#c9a227;cursor:pointer"
+                                  title="{{ u.get_display_name }}"
+                                  onclick="navigator.clipboard.writeText('{{ u.username }}').then(()=>showToast('已复制 {{ u.username }}','success'))">
+                                {{ u.username }}
+                            </code>
+                            {% endfor %}
+                        </div>
+                        <div class="text-muted mt-1" style="font-size:11px">点击用户名可复制</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showFileName(input) {
+    const fileNameEl = document.getElementById('fileName');
+    if (input.files.length > 0) {
+        fileNameEl.textContent = '已选择: ' + input.files[0].name;
+    }
+}
+
+// Drag and drop
+const zone = document.getElementById('uploadZone');
+const input = document.getElementById('fileInput');
+
+zone.addEventListener('dragover', e => {
+    e.preventDefault();
+    zone.classList.add('drag-over');
+});
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        const dt = new DataTransfer();
+        dt.items.add(files[0]);
+        input.files = dt.files;
+        showFileName(input);
+    }
+});
+</script>
+{% endblock %}

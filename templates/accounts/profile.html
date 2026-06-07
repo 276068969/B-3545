@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% block title %}{{ profile_user.get_display_name }} 的主页{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Profile Header -->
+    <div class="profile-header mb-4">
+        <div class="row align-items-center">
+            <div class="col-auto">
+                <div class="avatar-wrapper position-relative">
+                    <img src="{{ profile_user.get_avatar_url }}" alt="avatar" class="profile-avatar" id="profileAvatar">
+                    {% if is_own_profile %}
+                    <label for="avatarInput" class="avatar-edit-btn" title="更换头像">
+                        <i class="bi bi-camera"></i>
+                    </label>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col">
+                <h2 class="mb-1 text-light">{{ profile_user.get_display_name }}</h2>
+                <div class="text-muted">@{{ profile_user.username }}</div>
+                {% if profile_user.bio %}
+                <div class="mt-2 text-secondary">{{ profile_user.bio }}</div>
+                {% endif %}
+                <div class="mt-2 text-muted small">
+                    <i class="bi bi-calendar3"></i> 注册于 {{ profile_user.created_at|date:"Y年m月d日" }}
+                </div>
+            </div>
+            {% if is_own_profile %}
+            <div class="col-auto">
+                <a href="/accounts/profile/edit/" class="btn btn-outline-gold">
+                    <i class="bi bi-pencil"></i> 编辑资料
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Avatar Upload Form (hidden) -->
+    {% if is_own_profile %}
+    <form method="post" action="/accounts/profile/avatar/" enctype="multipart/form-data" id="avatarForm">
+        {% csrf_token %}
+        <input type="file" id="avatarInput" name="avatar" accept="image/*" class="d-none" onchange="this.form.submit()">
+    </form>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Stats -->
+        <div class="col-lg-4">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-graph-up text-gold"></i> 战绩统计</h6>
+                </div>
+                <div class="card-body-dark">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value">{{ stats.total_games }}</div>
+                            <div class="stat-name">总场次</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-win">{{ stats.wins }}</div>
+                            <div class="stat-name">胜场</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-loss">{{ stats.losses }}</div>
+                            <div class="stat-name">负场</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-gold">{{ stats.win_rate|floatformat:1 }}%</div>
+                            <div class="stat-name">胜率</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value {% if stats.total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ stats.total_score|stringformat:"+d" }}
+                            </div>
+                            <div class="stat-name">总得分</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value {% if stats.avg_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ stats.avg_score|floatformat:1 }}
+                            </div>
+                            <div class="stat-name">场均得分</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-win">{{ stats.max_score }}</div>
+                            <div class="stat-name">最高单场</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-loss">{{ stats.min_score }}</div>
+                            <div class="stat-name">最低单场</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-gold">{{ stats.max_consecutive_wins }}</div>
+                            <div class="stat-name">最大连胜</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-secondary">{{ stats.max_consecutive_losses }}</div>
+                            <div class="stat-name">最大连败</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-gold">{{ stats.domination_count }}</div>
+                            <div class="stat-name">全场通吃</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value text-info">{{ stats.comeback_count }}</div>
+                            <div class="stat-name">逆转胜利</div>
+                        </div>
+                    </div>
+
+                    <!-- Win Rate Bar -->
+                    {% if stats.total_games > 0 %}
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>胜率</span>
+                            <span>{{ stats.win_rate|floatformat:1 }}%</span>
+                        </div>
+                        <div class="progress bg-dark-custom" style="height:8px">
+                            <div class="progress-bar bg-gold" style="width:{{ stats.win_rate }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Score Trend & Recent Games -->
+        <div class="col-lg-8">
+            <!-- Score Trend Chart -->
+            {% if recent_games %}
+            <div class="card-dark mb-4">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-activity text-gold"></i> 近期得分趋势</h6>
+                </div>
+                <div class="card-body-dark">
+                    <canvas id="scoreTrendChart" height="100"></canvas>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Games -->
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-clock-history text-gold"></i> 最近战绩</h6>
+                    <a href="/games/?player={{ profile_user.pk }}" class="btn btn-sm btn-outline-gold">查看全部</a>
+                </div>
+                <div class="card-body-dark p-0">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>地点</th>
+                                    <th>得分</th>
+                                    <th>排名</th>
+                                    <th>对手</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for gp in recent_games %}
+                                <tr>
+                                    <td>
+                                        <a href="/games/{{ gp.game.pk }}/" class="text-light">
+                                            {{ gp.game.game_time|date:"m/d H:i" }}
+                                        </a>
+                                    </td>
+                                    <td class="text-muted">{{ gp.game.location|default:"-" }}</td>
+                                    <td>
+                                        <span class="fw-bold {% if gp.score > 0 %}text-win{% elif gp.score < 0 %}text-loss{% else %}text-muted{% endif %}">
+                                            {{ gp.score|stringformat:"+d" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="rank-sm rank-{{ gp.rank }}">第{{ gp.rank }}名</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex gap-1 flex-wrap">
+                                            {% for other_gp in gp.game.players.all %}
+                                            {% if other_gp.user != profile_user %}
+                                            <span class="opponent-tag">{{ other_gp.user.get_display_name }}</span>
+                                            {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">暂无战绩</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const scoreTrend = {{ score_trend|safe }};
+if (scoreTrend.length > 0) {
+    const ctx = document.getElementById('scoreTrendChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: scoreTrend.map((_, i) => `第${i+1}场`),
+                datasets: [{
+                    label: '得分',
+                    data: scoreTrend,
+                    borderColor: '#c9a227',
+                    backgroundColor: 'rgba(201,162,39,0.15)',
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: scoreTrend.map(v => v >= 0 ? '#2ecc71' : '#e74c3c'),
+                    pointRadius: 5,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#aaa' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#aaa' }
+                    }
+                }
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% block title %}战绩详情 #{{ game.pk }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            <h3 class="mb-1">
+                <i class="bi bi-calendar3 text-gold"></i>
+                {{ game.game_time|date:"Y年m月d日 H:i" }}
+                {% if game.location %}
+                <span class="text-muted fs-5 ms-2"><i class="bi bi-geo-alt"></i> {{ game.location }}</span>
+                {% endif %}
+            </h3>
+            <div>
+                <span class="badge bg-secondary">{{ game.get_game_type_display }}</span>
+                <span class="text-muted small ms-2">底分 {{ game.base_score }} 元/分</span>
+                {% if game.is_supplemental %}<span class="badge badge-supp ms-1">补录</span>{% endif %}
+                <span class="text-muted small ms-2">录入人: {{ game.creator.get_display_name }}</span>
+            </div>
+        </div>
+        {% if can_edit %}
+        <div class="d-flex gap-2">
+            <a href="/games/{{ game.pk }}/edit/" class="btn btn-outline-gold">
+                <i class="bi bi-pencil"></i> 编辑
+            </a>
+            <form method="post" action="/games/{{ game.pk }}/delete/"
+                  data-confirm="确认删除此条战绩？此操作不可撤销。">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-danger">
+                    <i class="bi bi-trash"></i> 删除
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="row g-4">
+        <!-- Player Scores -->
+        <div class="col-lg-5">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-people text-gold"></i> 对局结果</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for gp in players %}
+                    <div class="result-player-row mb-3 p-3 rounded {% if gp.is_winner %}result-winner{% endif %}">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="result-rank rank-{{ gp.rank }}">{{ gp.rank }}</div>
+                            <img src="{{ gp.user.get_avatar_url }}" class="result-avatar">
+                            <div class="flex-grow-1">
+                                <a href="/accounts/profile/{{ gp.user.username }}/" class="result-player-name">
+                                    {{ gp.user.get_display_name }}
+                                    {% if gp.is_winner %}
+                                    <i class="bi bi-crown-fill text-gold ms-1"></i>
+                                    {% endif %}
+                                </a>
+                                {% if gp.patterns.all %}
+                                <div class="mt-1 d-flex flex-wrap gap-1">
+                                    {% for pr in gp.patterns.all %}
+                                    <span class="pattern-display-tag" title="{{ pr.tile_pattern.description }}">
+                                        {{ pr.tile_pattern.name }}
+                                        {% if pr.is_self_draw %}<i class="bi bi-arrow-down-circle ms-1 text-info"></i>{% endif %}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="text-end">
+                                <div class="result-score {% if gp.score > 0 %}text-win{% elif gp.score < 0 %}text-loss{% else %}text-muted{% endif %}">
+                                    {{ gp.score|stringformat:"+d" }}
+                                </div>
+                                <div class="result-amount text-muted small">
+                                    {{ gp.get_amount|stringformat:"+d" }} 元
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% if game.notes %}
+                    <div class="mt-3 p-2 rounded bg-card-inner">
+                        <div class="text-muted small"><i class="bi bi-chat-text"></i> 备注</div>
+                        <div class="text-light mt-1">{{ game.notes }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Score Chart & Details -->
+        <div class="col-lg-7">
+            <!-- Bar Chart -->
+            <div class="card-dark mb-4">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart text-gold"></i> 得分分布</h6>
+                </div>
+                <div class="card-body-dark">
+                    <canvas id="scoreChart" height="150"></canvas>
+                </div>
+            </div>
+
+            <!-- Highlights -->
+            {% if highlights %}
+            <div class="card-dark mb-4">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-stars text-gold"></i> 本局高光时刻</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for h in highlights %}
+                    <div class="highlight-item p-2 mb-2 rounded">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge badge-highlight-type">{{ h.get_highlight_type_display }}</span>
+                            <span class="text-light">{{ h.title }}</span>
+                            <span class="ms-auto highlight-score-sm">{{ h.highlight_score }}分</span>
+                        </div>
+                        {% if h.description %}
+                        <div class="text-muted small mt-1">{{ h.description }}</div>
+                        {% endif %}
+                        {% if user.is_authenticated %}
+                        <div class="mt-1">
+                            <button class="btn btn-sm btn-outline-secondary collect-btn" 
+                                    data-id="{{ h.pk }}"
+                                    onclick="collectHighlight({{ h.pk }}, this)">
+                                <i class="bi bi-heart{% if user in h.collected_by.all %}-fill text-danger{% endif %}"></i>
+                                <span class="collect-count">{{ h.collected_by.count }}</span>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Pattern Statistics -->
+            {% if players %}
+            {% with all_patterns=players %}
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-grid text-gold"></i> 牌型记录</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for gp in players %}
+                    {% if gp.patterns.all %}
+                    <div class="mb-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <img src="{{ gp.user.get_avatar_url }}" class="mini-avatar">
+                            <span class="text-light fw-bold">{{ gp.user.get_display_name }}</span>
+                        </div>
+                        {% for pr in gp.patterns.all %}
+                        <div class="pattern-detail-row p-2 mb-1 rounded">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="pattern-display-tag">{{ pr.tile_pattern.name }}</span>
+                                <span class="text-muted small">{{ pr.tile_pattern.fan_count }}番</span>
+                                {% if pr.is_self_draw %}
+                                <span class="badge bg-info">自摸</span>
+                                {% else %}
+                                <span class="badge bg-secondary">点炮</span>
+                                {% endif %}
+                                {% if pr.shooter %}
+                                <span class="text-muted small">炮手: {{ pr.shooter.get_display_name }}</span>
+                                {% endif %}
+                                {% if pr.consecutive_dealer %}
+                                <span class="badge bg-warning text-dark">连庄{{ pr.consecutive_dealer }}次</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                    {% if not players|length %}
+                    <div class="text-muted text-center py-2">本局无牌型记录</div>
+                    {% endif %}
+                    {% with has_patterns=False %}
+                    {% for gp in players %}{% if gp.patterns.all %}{% with has_patterns=True %}{% endwith %}{% endif %}{% endfor %}
+                    {% endwith %}
+                </div>
+            </div>
+            {% endwith %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const scoreData = {{ score_data|safe }};
+
+const ctx = document.getElementById('scoreChart');
+if (ctx && scoreData.players.length > 0) {
+    const colors = scoreData.scores.map(s =>
+        s > 0 ? 'rgba(46,204,113,0.7)' : s < 0 ? 'rgba(231,76,60,0.7)' : 'rgba(149,165,166,0.5)'
+    );
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: scoreData.players,
+            datasets: [{
+                label: '得分',
+                data: scoreData.scores,
+                backgroundColor: colors,
+                borderColor: colors.map(c => c.replace('0.7', '1')),
+                borderWidth: 1,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => (ctx.raw >= 0 ? '+' : '') + ctx.raw + ' 分'
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#aaa' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#ddd' }
+                }
+            }
+        }
+    });
+}
+
+async function collectHighlight(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/collect/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    const icon = btn.querySelector('i');
+    const count = btn.querySelector('.collect-count');
+    icon.className = data.collected ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+    count.textContent = data.count;
+}
+</script>
+{% endblock %}

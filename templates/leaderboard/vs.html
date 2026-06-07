@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% block title %}玩家对比{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-people text-gold"></i> 玩家对比分析</h3>
+    </div>
+
+    <!-- Select Players -->
+    <div class="card-dark mb-4">
+        <div class="card-body-dark">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label text-muted">玩家一</label>
+                    <select name="player1" class="form-select">
+                        <option value="">-- 选择玩家 --</option>
+                        {% for u in all_users %}
+                        <option value="{{ u.pk }}" {% if player1_id == u.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ u.get_display_name }} (@{{ u.username }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1 text-center">
+                    <span class="text-gold fs-3">VS</span>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-muted">玩家二</label>
+                    <select name="player2" class="form-select">
+                        <option value="">-- 选择玩家 --</option>
+                        {% for u in all_users %}
+                        <option value="{{ u.pk }}" {% if player2_id == u.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ u.get_display_name }} (@{{ u.username }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-gold w-100">
+                        <i class="bi bi-search"></i> 对比分析
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if comparison %}
+    <div class="row g-4">
+        <!-- Head to Head Summary -->
+        <div class="col-12">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-bar-chart text-gold"></i> 正面交手统计（共 {{ comparison.total }} 场）</h6>
+                </div>
+                <div class="card-body-dark">
+                    <div class="row align-items-center text-center">
+                        <div class="col">
+                            <img src="{{ comparison.p1.get_avatar_url }}" class="profile-avatar-sm mb-2">
+                            <div class="fw-bold text-light fs-5">{{ comparison.p1.get_display_name }}</div>
+                            <div class="vs-win-count text-win">{{ comparison.p1_wins }}</div>
+                            <div class="text-muted small">胜利</div>
+                            <div class="mt-2 {% if comparison.p1_total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ comparison.p1_total_score|stringformat:"+d" }} 分
+                            </div>
+                            <div class="text-muted small">场均 {{ comparison.p1_avg_score|floatformat:1 }}</div>
+                        </div>
+                        <div class="col-auto px-4">
+                            <div class="vs-separator">
+                                <div class="text-gold fs-2">VS</div>
+                                {% if comparison.draws > 0 %}
+                                <div class="text-muted small">{{ comparison.draws }} 平</div>
+                                {% endif %}
+                            </div>
+                            <!-- Bar comparison -->
+                            <div class="vs-bar-wrapper mt-3">
+                                {% if comparison.total > 0 %}
+                                {% with p1_pct=comparison.p1_wins|stringformat:"s" %}
+                                <div class="vs-bar">
+                                    <div class="vs-bar-p1" style="width:{% widthratio comparison.p1_wins comparison.total 100 %}%"></div>
+                                    <div class="vs-bar-p2" style="width:{% widthratio comparison.p2_wins comparison.total 100 %}%"></div>
+                                </div>
+                                {% endwith %}
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col">
+                            <img src="{{ comparison.p2.get_avatar_url }}" class="profile-avatar-sm mb-2">
+                            <div class="fw-bold text-light fs-5">{{ comparison.p2.get_display_name }}</div>
+                            <div class="vs-win-count text-win">{{ comparison.p2_wins }}</div>
+                            <div class="text-muted small">胜利</div>
+                            <div class="mt-2 {% if comparison.p2_total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ comparison.p2_total_score|stringformat:"+d" }} 分
+                            </div>
+                            <div class="text-muted small">场均 {{ comparison.p2_avg_score|floatformat:1 }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent H2H Games -->
+        {% if comparison.game_history %}
+        <div class="col-12">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-clock-history text-gold"></i> 近期交手记录</h6>
+                </div>
+                <div class="card-body-dark p-0">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th class="text-center">{{ comparison.p1.get_display_name }}</th>
+                                    <th class="text-center">{{ comparison.p2.get_display_name }}</th>
+                                    <th class="text-center">结果</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for gh in comparison.game_history %}
+                                <tr>
+                                    <td>
+                                        <a href="/games/{{ gh.game.pk }}/" class="text-light">
+                                            {{ gh.game.game_time|date:"m月d日 H:i" }}
+                                        </a>
+                                    </td>
+                                    <td class="text-center fw-bold {% if gh.p1_score > 0 %}text-win{% else %}text-loss{% endif %}">
+                                        {{ gh.p1_score|stringformat:"+d" }}
+                                    </td>
+                                    <td class="text-center fw-bold {% if gh.p2_score > 0 %}text-win{% else %}text-loss{% endif %}">
+                                        {{ gh.p2_score|stringformat:"+d" }}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if gh.result == 'p1' %}
+                                        <span class="badge bg-success">{{ comparison.p1.get_display_name }} 赢</span>
+                                        {% elif gh.result == 'p2' %}
+                                        <span class="badge bg-danger">{{ comparison.p2.get_display_name }} 赢</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">平局</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

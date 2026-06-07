@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}编辑战绩 #{{ game.pk }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-pencil text-gold"></i> 编辑战绩 #{{ game.pk }}</h3>
+        <a href="/games/{{ game.pk }}/" class="btn btn-sm btn-outline-secondary mt-2">
+            <i class="bi bi-arrow-left"></i> 返回详情
+        </a>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="row g-4">
+            <div class="col-lg-5">
+                <div class="card-dark">
+                    <div class="card-header-dark">
+                        <h6 class="mb-0"><i class="bi bi-info-circle text-gold"></i> 游戏信息</h6>
+                    </div>
+                    <div class="card-body-dark">
+                        {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label text-light">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}
+                            <div class="text-danger small">{{ field.errors|join:", " }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="card-dark">
+                    <div class="card-header-dark">
+                        <h6 class="mb-0"><i class="bi bi-people text-gold"></i> 玩家得分</h6>
+                        <div class="score-balance" id="scoreBalance">
+                            合计: <span id="balanceValue" class="fw-bold">0</span>
+                        </div>
+                    </div>
+                    <div class="card-body-dark">
+                        {% for gp in players %}
+                        <div class="d-flex align-items-center gap-3 p-3 rounded bg-card-inner mb-2">
+                            <img src="{{ gp.user.get_avatar_url }}" class="player-entry-avatar">
+                            <div class="flex-grow-1">
+                                <div class="fw-bold text-light">{{ gp.user.get_display_name }}</div>
+                                <div class="text-muted small">@{{ gp.user.username }}</div>
+                            </div>
+                            <div class="score-input-wrapper">
+                                <input type="number" name="score_{{ gp.pk }}"
+                                       class="form-control score-input" value="{{ gp.score }}"
+                                       onchange="updateBalance()" oninput="updateBalance()">
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="d-flex gap-3 mt-4">
+                    <button type="submit" class="btn btn-gold btn-lg flex-grow-1">
+                        <i class="bi bi-check-circle"></i> 保存修改
+                    </button>
+                    <a href="/games/{{ game.pk }}/" class="btn btn-outline-secondary btn-lg">取消</a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateBalance() {
+    const inputs = document.querySelectorAll('.score-input');
+    let total = 0;
+    inputs.forEach(inp => {
+        const val = parseFloat(inp.value);
+        if (!isNaN(val)) total += val;
+    });
+    const balanceEl = document.getElementById('balanceValue');
+    balanceEl.textContent = total;
+    balanceEl.style.color = total === 0 ? '#2ecc71' : '#e74c3c';
+}
+updateBalance();
+</script>
+{% endblock %}

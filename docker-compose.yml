@@ -1,0 +1,59 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: mahjong_db
+      POSTGRES_USER: mahjong_user
+      POSTGRES_PASSWORD: mahjong_pass123
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mahjong_user -d mahjong_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  web:
+    build: .
+    volumes:
+      - media_files:/app/media
+      - static_files:/app/staticfiles
+    environment:
+      - DATABASE_URL=postgresql://mahjong_user:mahjong_pass123@db:5432/mahjong_db
+      - SECRET_KEY=mahjong-secret-key-change-in-production-2024
+      - DEBUG=0
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - CSRF_TRUSTED_ORIGINS=http://localhost:8888,http://127.0.0.1:8888
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose:
+      - 8000
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - static_files:/app/staticfiles
+      - media_files:/app/media
+    ports:
+      - "8888:80"
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_files:
+  static_files:

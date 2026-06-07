@@ -1,0 +1,415 @@
+{% extends 'base.html' %}
+{% block title %}{{ room.name }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Room Header -->
+    <div class="room-detail-header mb-4 p-4 rounded">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h2 class="text-light mb-1">{{ room.name }}</h2>
+                <div class="d-flex gap-3 align-items-center flex-wrap">
+                    <span class="badge {% if room.status == 'waiting' %}bg-success{% elif room.status == 'playing' %}bg-warning text-dark{% else %}bg-secondary{% endif %} fs-6">
+                        {{ room.get_status_display }}
+                    </span>
+                    <span class="text-muted"><i class="bi bi-tag"></i> 房间码: <span class="text-gold fw-bold fs-5">{{ room.code }}</span></span>
+                    <span class="text-muted"><i class="bi bi-joystick"></i> {{ room.get_game_type_display }}</span>
+                    <span class="text-muted"><i class="bi bi-coin"></i> {{ room.base_score }}元/分</span>
+                </div>
+                {% if room.description %}
+                <p class="text-muted mt-2 mb-0">{{ room.description }}</p>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if user.is_authenticated %}
+                    {% if not user_in_room and room.status == 'waiting' %}
+                    <form method="post" action="/rooms/{{ room.pk }}/join/">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-gold">
+                            <i class="bi bi-door-open"></i> 加入房间
+                        </button>
+                    </form>
+                    {% elif user_in_room %}
+                        {% if room.host == user %}
+                        <a href="/rooms/{{ room.pk }}/start/" class="btn btn-gold">
+                            <i class="bi bi-play-circle"></i> 开始游戏
+                        </a>
+                        <form method="post" action="/rooms/{{ room.pk }}/close/" class="d-inline"
+                              data-confirm="确认关闭房间？关闭后其他玩家将无法加入。">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger">
+                                <i class="bi bi-x-circle"></i> 关闭房间
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="post" action="/rooms/{{ room.pk }}/leave/" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary">
+                                <i class="bi bi-box-arrow-left"></i> 退出房间
+                            </button>
+                        </form>
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Scoreboard Section -->
+    {% if scoreboard.has_active_game or is_host %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-table text-gold"></i>
+                实时记分台
+                {% if scoreboard.has_active_game %}
+                <span class="badge bg-info ms-2">第 {{ scoreboard.current_round }} 局</span>
+                {% endif %}
+            </h6>
+            {% if is_host %}
+            <div class="d-flex gap-2">
+                {% if not scoreboard.has_active_game %}
+                <button class="btn btn-sm btn-gold" onclick="startScoreboard()">
+                    <i class="bi bi-play-fill"></i> 开启记分台
+                </button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-gold" onclick="showRecordModal()">
+                    <i class="bi bi-pencil-square"></i> 录入本局
+                </button>
+                <button class="btn btn-sm btn-outline-success" onclick="endScoreboard()">
+                    <i class="bi bi-check-circle"></i> 结束并保存
+                </button>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="card-body-dark">
+            {% if not scoreboard.has_active_game %}
+            <div class="text-center py-4 text-muted">
+                <i class="bi bi-stopwatch fs-1 mb-2 d-block"></i>
+                <p>暂无进行中的游戏</p>
+                {% if is_host %}
+                <p class="small">点击上方「开启记分台」开始实时记分</p>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <div class="scoreboard-ranking">
+                        {% for p in scoreboard.players %}
+                        <div class="scoreboard-player-item {% if forloop.first %}scoreboard-leader{% endif %} {% if p.score < 0 %}scoreboard-loser{% endif %}">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="scoreboard-rank rank-{{ p.rank }}">{{ p.rank }}</div>
+                                <img src="{{ p.player.get_avatar_url }}" class="scoreboard-avatar">
+                                <div class="flex-grow-1">
+                                    <div class="scoreboard-player-name">
+                                        {{ p.player.get_display_name }}
+                                        {% if p.player == room.host %}
+                                        <span class="badge bg-gold text-dark ms-1 small">房主</span>
+                                        {% endif %}
+                                        {% if forloop.first %}
+                                        <i class="bi bi-crown-fill text-gold ms-1"></i>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="scoreboard-score {% if p.score > 0 %}text-win{% elif p.score < 0 %}text-loss{% endif %}">
+                                    {{ p.score|stringformat:"+d" }}
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="text-center py-3 text-muted">
+                            <p class="mb-0">暂无分数记录</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="scoreboard-stats">
+                        <div class="score-stat-item">
+                            <div class="text-muted small">领先差距</div>
+                            <div class="score-stat-value text-gold">{{ scoreboard.lead_gap }} 分</div>
+                        </div>
+
+                        {% if scoreboard.comeback_candidates %}
+                        <div class="comeback-alert mt-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-arrow-counterclockwise text-warning"></i>
+                                <span class="text-warning fw-bold">逆转候选！</span>
+                            </div>
+                            {% for c in scoreboard.comeback_candidates %}
+                            <div class="comeback-candidate-item">
+                                <span>{{ c.player.get_display_name }}</span>
+                                <span class="text-muted small">曾落后 {{ c.deficit }} 分</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        {% if scoreboard.round_history %}
+                        <div class="mt-3">
+                            <div class="text-muted small mb-2">历史局数</div>
+                            <div class="round-history-list">
+                                {% for h in scoreboard.round_history %}
+                                <div class="round-history-item" data-round="{{ h.round }}">
+                                    <span class="round-badge">第{{ h.round }}局</span>
+                                    {% for s in h.snapshots|slice:":2" %}
+                                    <span class="round-player-score {% if s.score > 0 %}text-win{% elif s.score < 0 %}text-loss{% endif %} small">
+                                        {{ s.player.get_display_name }}: {{ s.score|stringformat:"+d" }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- Members -->
+        <div class="col-lg-4">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0">
+                        <i class="bi bi-people text-gold"></i>
+                        房间成员 {{ members|length }}/{{ room.max_players }}
+                    </h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for member in members %}
+                    <div class="d-flex align-items-center gap-3 p-2 mb-2 rounded bg-card-inner">
+                        <img src="{{ member.user.get_avatar_url }}" class="player-avatar">
+                        <div class="flex-grow-1">
+                            <a href="/accounts/profile/{{ member.user.username }}/" class="player-name">
+                                {{ member.user.get_display_name }}
+                            </a>
+                            {% if member.user == room.host %}
+                            <span class="badge bg-gold text-dark ms-1 small">房主</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-muted small">
+                            {{ member.joined_at|date:"H:i" }} 加入
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-muted text-center py-3">暂无成员</div>
+                    {% endfor %}
+
+                    {% if room.status == 'waiting' and members|length < room.max_players %}
+                    <div class="mt-3 p-2 text-center text-muted small border border-dashed rounded">
+                        还可加入 {{ room.max_players|add:"-"|add:members|length }} 人
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Games in this Room -->
+        <div class="col-lg-8">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-journal-text text-gold"></i> 本房间战绩</h6>
+                    {% if user.is_authenticated and user_in_room %}
+                    <a href="/games/create/?room={{ room.pk }}" class="btn btn-sm btn-outline-gold">
+                        <i class="bi bi-plus"></i> 录入战绩
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body-dark">
+                    {% for game in games %}
+                    <div class="game-row p-2 mb-2 rounded">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <a href="/games/{{ game.pk }}/" class="game-link">
+                                <i class="bi bi-calendar3"></i>
+                                {{ game.game_time|date:"m月d日 H:i" }}
+                            </a>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% for gp in game.players.all %}
+                            <span class="player-score-tag {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
+                                {{ gp.user.get_display_name }}: {{ gp.score|stringformat:"+d" }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-journal-x fs-2"></i>
+                        <p class="mt-2 small">本房间暂无战绩记录</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Record Round Modal -->
+<div class="modal fade" id="recordModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:#1a2f3e;border:1px solid #2d4a5e">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title text-light">
+                    <i class="bi bi-pencil-square text-gold"></i>
+                    录入第 <span id="nextRoundNum">1</span> 局分数
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="recordForm">
+                    <div id="scoreInputs" class="mb-3">
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted small">分数总和</span>
+                            <span id="totalScore" class="fw-bold">0</span>
+                        </div>
+                        <div class="form-text text-muted">所有玩家得分之和必须为 0</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-gold" onclick="submitRecord()">确认录入</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ROOM_ID = {{ room.pk }};
+const IS_HOST = {{ is_host|lower }};
+const CURRENT_ROUND = {{ scoreboard.current_round }};
+
+const roomMembers = [
+    {% for member in members %}
+    { id: {{ member.user.pk }}, name: "{{ member.user.get_display_name }}", avatar: "{{ member.user.get_avatar_url }}" },
+    {% endfor %}
+];
+
+function startScoreboard() {
+    showConfirm('确认开启记分台？开启后将创建一局新的实时游戏。', function() {
+        fetch(`/rooms/${ROOM_ID}/scoreboard/start/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                location.reload();
+            } else {
+                showAlert(data.error || '开启失败');
+            }
+        })
+        .catch(e => showAlert('网络错误，请重试'));
+    });
+}
+
+function showRecordModal() {
+    const nextRound = CURRENT_ROUND + 1;
+    document.getElementById('nextRoundNum').textContent = nextRound;
+    
+    const container = document.getElementById('scoreInputs');
+    container.innerHTML = '';
+    
+    roomMembers.forEach(member => {
+        const div = document.createElement('div');
+        div.className = 'd-flex align-items-center gap-3 mb-2 p-2 rounded bg-card-inner';
+        div.innerHTML = `
+            <img src="${member.avatar}" class="player-avatar" style="width:32px;height:32px;">
+            <span class="flex-grow-1 text-light">${member.name}</span>
+            <input type="number" class="form-control score-input" 
+                   style="width:120px;background:#0d1b2a;border-color:#2a4a65;color:#fff;" 
+                   data-user-id="${member.id}" 
+                   value="0" 
+                   oninput="updateTotalScore()">
+        `;
+        container.appendChild(div);
+    });
+    
+    updateTotalScore();
+    
+    const modal = new bootstrap.Modal(document.getElementById('recordModal'));
+    modal.show();
+}
+
+function updateTotalScore() {
+    const inputs = document.querySelectorAll('#scoreInputs .score-input');
+    let total = 0;
+    inputs.forEach(input => {
+        total += parseInt(input.value) || 0;
+    });
+    const totalEl = document.getElementById('totalScore');
+    totalEl.textContent = total;
+    totalEl.className = 'fw-bold ' + (total === 0 ? 'text-win' : 'text-loss');
+}
+
+function submitRecord() {
+    const inputs = document.querySelectorAll('#scoreInputs .score-input');
+    const scores = {};
+    inputs.forEach(input => {
+        const userId = input.dataset.userId;
+        scores[userId] = parseInt(input.value) || 0;
+    });
+    
+    const total = Object.values(scores).reduce((a, b) => a + b, 0);
+    if (total !== 0) {
+        showAlert('所有玩家得分之和必须为 0');
+        return;
+    }
+    
+    fetch(`/rooms/${ROOM_ID}/scoreboard/record/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ scores: scores }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            showAlert(data.error || '录入失败');
+        }
+    })
+    .catch(e => showAlert('网络错误，请重试'));
+}
+
+function endScoreboard() {
+    showConfirm('确认结束本局游戏？结束后将保存为正式战绩记录。', function() {
+        fetch(`/rooms/${ROOM_ID}/scoreboard/end/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                showToast('游戏已结束，战绩已保存！', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(data.error || '结束失败');
+            }
+        })
+        .catch(e => showAlert('网络错误，请重试'));
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% block title %}首页{% endblock %}
+
+{% block content %}
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container">
+        <div class="row align-items-center py-5">
+            <div class="col-lg-6">
+                <h1 class="hero-title">
+                    🀄 麻将战绩<br>
+                    <span class="text-gold">排行榜系统</span>
+                </h1>
+                <p class="hero-subtitle">记录每一局精彩战役，追踪胜负数据，见证逆转时刻</p>
+                <div class="d-flex gap-3 flex-wrap">
+                    <a href="/leaderboard/" class="btn btn-gold btn-lg">
+                        <i class="bi bi-trophy"></i> 查看排行榜
+                    </a>
+                    {% if user.is_authenticated %}
+                    <a href="/games/create/" class="btn btn-outline-gold btn-lg">
+                        <i class="bi bi-plus-circle"></i> 录入战绩
+                    </a>
+                    {% else %}
+                    <a href="/accounts/register/" class="btn btn-outline-gold btn-lg">
+                        <i class="bi bi-person-plus"></i> 立即加入
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-lg-6 text-center d-none d-lg-block">
+                <div class="hero-tiles">
+                    <span class="big-tile">🀇</span>
+                    <span class="big-tile">🀙</span>
+                    <span class="big-tile">🀅</span>
+                    <span class="big-tile">🀄</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Stats Banner -->
+<section class="stats-banner py-4">
+    <div class="container">
+        <div class="row g-3">
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ total_games }}</div>
+                    <div class="stat-label">总场次</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ total_players }}</div>
+                    <div class="stat-label">参与玩家</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ this_month_games }}</div>
+                    <div class="stat-label">本月场次</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ recent_highlights|length }}</div>
+                    <div class="stat-label">精选高光</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="container py-4">
+    <div class="row g-4">
+        <!-- Top Players -->
+        <div class="col-lg-6">
+            <div class="card-dark h-100">
+                <div class="card-header-dark">
+                    <h5 class="mb-0"><i class="bi bi-trophy text-gold"></i> 胜率排行 TOP 5</h5>
+                    <a href="/leaderboard/" class="btn btn-sm btn-outline-gold">查看全部</a>
+                </div>
+                <div class="card-body-dark">
+                    {% for stats in top_players %}
+                    <div class="player-row d-flex align-items-center p-2 mb-2 rounded">
+                        <div class="rank-badge rank-{{ forloop.counter }}">{{ forloop.counter }}</div>
+                        <img src="{{ stats.user.get_avatar_url }}" alt="avatar" class="player-avatar mx-2">
+                        <div class="flex-grow-1">
+                            <a href="/accounts/profile/{{ stats.user.username }}/" class="player-name">
+                                {{ stats.user.get_display_name }}
+                            </a>
+                            <div class="player-meta">{{ stats.total_games }}场 | 胜{{ stats.wins }}场</div>
+                        </div>
+                        <div class="text-end">
+                            <div class="win-rate-badge">{{ stats.win_rate|floatformat:1 }}%</div>
+                            <div class="score-small {% if stats.total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ stats.total_score }}分
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-person-x fs-1"></i>
+                        <p class="mt-2">暂无数据，快去录入战绩吧！</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Games -->
+        <div class="col-lg-6">
+            <div class="card-dark h-100">
+                <div class="card-header-dark">
+                    <h5 class="mb-0"><i class="bi bi-clock-history text-gold"></i> 最近战绩</h5>
+                    <a href="/games/" class="btn btn-sm btn-outline-gold">查看全部</a>
+                </div>
+                <div class="card-body-dark">
+                    {% for game in recent_games %}
+                    <div class="game-row p-2 mb-2 rounded">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <a href="/games/{{ game.pk }}/" class="game-link">
+                                <i class="bi bi-calendar3"></i>
+                                {{ game.game_time|date:"m月d日 H:i" }}
+                                {% if game.location %} · {{ game.location }}{% endif %}
+                            </a>
+                            {% if game.is_supplemental %}
+                            <span class="badge badge-supp">补录</span>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% for gp in game.players.all %}
+                            <span class="player-score-tag {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
+                                {{ gp.user.get_display_name }}
+                                <strong>{{ gp.score|stringformat:"+d" }}</strong>
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-journal-x fs-1"></i>
+                        <p class="mt-2">还没有战绩记录</p>
+                        <a href="/games/create/" class="btn btn-gold btn-sm">立即录入</a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Highlights -->
+        {% if recent_highlights %}
+        <div class="col-12">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h5 class="mb-0"><i class="bi bi-stars text-gold"></i> 精选高光时刻</h5>
+                    <a href="/leaderboard/highlights/" class="btn btn-sm btn-outline-gold">查看全部</a>
+                </div>
+                <div class="card-body-dark">
+                    <div class="row g-3">
+                        {% for highlight in recent_highlights %}
+                        <div class="col-md-4">
+                            <div class="highlight-card p-3 rounded">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <img src="{{ highlight.winner.get_avatar_url }}" alt="avatar" class="player-avatar">
+                                    <div>
+                                        <div class="player-name">{{ highlight.winner.get_display_name }}</div>
+                                        <div class="small text-muted">{{ highlight.game.game_time|date:"m月d日" }}</div>
+                                    </div>
+                                    <div class="ms-auto highlight-score-badge">{{ highlight.highlight_score }}</div>
+                                </div>
+                                <div class="highlight-title">{{ highlight.title }}</div>
+                                {% if highlight.description %}
+                                <div class="highlight-desc text-muted small mt-1">{{ highlight.description }}</div>
+                                {% endif %}
+                                <div class="mt-2">
+                                    <span class="badge badge-highlight-type">
+                                        {{ highlight.get_highlight_type_display }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Actions -->
+        <div class="col-12">
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <a href="/rooms/create/" class="quick-action-card d-block text-center p-3 rounded text-decoration-none">
+                        <i class="bi bi-door-open fs-2 text-gold"></i>
+                        <div class="mt-2">创建房间</div>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a href="/games/import/" class="quick-action-card d-block text-center p-3 rounded text-decoration-none">
+                        <i class="bi bi-file-earmark-arrow-up fs-2 text-gold"></i>
+                        <div class="mt-2">批量导入</div>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a href="/leaderboard/domination/" class="quick-action-card d-block text-center p-3 rounded text-decoration-none">
+                        <i class="bi bi-lightning-charge fs-2 text-gold"></i>
+                        <div class="mt-2">通吃榜</div>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a href="/leaderboard/vs/" class="quick-action-card d-block text-center p-3 rounded text-decoration-none">
+                        <i class="bi bi-people fs-2 text-gold"></i>
+                        <div class="mt-2">玩家对比</div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

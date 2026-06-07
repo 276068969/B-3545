@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block title %}高光时刻集锦{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-stars text-gold"></i> 高光时刻集锦</h3>
+        <p class="text-muted mt-1">精彩永不消逝，记录每一个闪光瞬间</p>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="d-flex gap-2 flex-wrap mb-4">
+        <a href="/leaderboard/highlights/?sort={{ sort_by }}" class="btn btn-sm {% if not highlight_type %}btn-gold{% else %}btn-outline-secondary{% endif %}">全部</a>
+        {% for value, label in highlight_type_choices %}
+        <a href="/leaderboard/highlights/?sort={{ sort_by }}&type={{ value }}"
+           class="btn btn-sm {% if highlight_type == value %}btn-gold{% else %}btn-outline-secondary{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+
+        <div class="ms-auto d-flex gap-2">
+            <span class="text-muted small align-self-center">排序：</span>
+            <a href="/leaderboard/highlights/?sort=score&type={{ highlight_type }}" class="btn btn-sm {% if sort_by == 'score' %}btn-outline-gold{% else %}btn-outline-secondary{% endif %}">精彩度</a>
+            <a href="/leaderboard/highlights/?sort=time&type={{ highlight_type }}" class="btn btn-sm {% if sort_by == 'time' %}btn-outline-gold{% else %}btn-outline-secondary{% endif %}">最新</a>
+            <a href="/leaderboard/highlights/?sort=collected&type={{ highlight_type }}" class="btn btn-sm {% if sort_by == 'collected' %}btn-outline-gold{% else %}btn-outline-secondary{% endif %}">最多收藏</a>
+        </div>
+    </div>
+
+    <!-- Highlights Grid -->
+    <div class="row g-3">
+        {% for highlight in highlights %}
+        <div class="col-md-6 col-lg-4">
+            <div class="highlight-card-full h-100">
+                <!-- Header -->
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <img src="{{ highlight.winner.get_avatar_url }}" class="player-avatar">
+                    <div class="flex-grow-1">
+                        <a href="/accounts/profile/{{ highlight.winner.username }}/" class="player-name">
+                            {{ highlight.winner.get_display_name }}
+                        </a>
+                        <div class="text-muted small">
+                            <a href="/games/{{ highlight.game.pk }}/" class="text-muted">
+                                {{ highlight.game.game_time|date:"Y年m月d日" }}
+                            </a>
+                        </div>
+                    </div>
+                    <div class="highlight-score-badge">{{ highlight.highlight_score }}</div>
+                </div>
+
+                <!-- Type Badge -->
+                <div class="mb-2">
+                    <span class="badge badge-highlight-type badge-{{ highlight.highlight_type }}">
+                        {% if highlight.highlight_type == 'domination' %}⚡
+                        {% elif highlight.highlight_type == 'comeback' %}↩️
+                        {% elif highlight.highlight_type == 'big_win' %}🎯
+                        {% elif highlight.highlight_type == 'rare_pattern' %}✨
+                        {% endif %}
+                        {{ highlight.get_highlight_type_display }}
+                    </span>
+                    {% if highlight.is_featured %}
+                    <span class="badge bg-warning text-dark ms-1"><i class="bi bi-star-fill"></i> 精选</span>
+                    {% endif %}
+                </div>
+
+                <!-- Title & Description -->
+                <div class="highlight-title mb-1">{{ highlight.title }}</div>
+                {% if highlight.description %}
+                <div class="highlight-desc text-muted small">{{ highlight.description }}</div>
+                {% endif %}
+
+                <!-- Game Scores -->
+                <div class="mt-2 d-flex gap-1 flex-wrap">
+                    {% for gp in highlight.game.players.all %}
+                    <span class="player-score-tag small {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
+                        {{ gp.user.get_display_name }}: {{ gp.score|stringformat:"+d" }}
+                    </span>
+                    {% endfor %}
+                </div>
+
+                <!-- Actions -->
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-secondary">
+                    <a href="/games/{{ highlight.game.pk }}/" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-eye"></i> 查看详情
+                    </a>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-secondary"
+                                onclick="shareHighlight('{{ highlight.title|escapejs }}', '{{ request.scheme }}://{{ request.get_host }}/games/{{ highlight.game.pk }}/')"
+                                title="分享">
+                            <i class="bi bi-share"></i>
+                        </button>
+                        {% if user.is_authenticated %}
+                        <button class="btn btn-sm btn-outline-secondary collect-btn" data-id="{{ highlight.pk }}"
+                                onclick="collectHighlight({{ highlight.pk }}, this)">
+                            <i class="bi bi-heart{% if highlight.pk in collected_ids %}-fill text-danger{% endif %}"></i>
+                            <span class="collect-count">{{ highlight.collected_by.count }}</span>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-stars fs-1"></i>
+                <p class="mt-3">暂无高光时刻记录</p>
+                <p class="small">录入游戏战绩后，系统将自动识别并生成高光时刻</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function collectHighlight(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/collect/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    const icon = btn.querySelector('i');
+    const count = btn.querySelector('.collect-count');
+    icon.className = data.collected ? 'bi bi-heart-fill text-danger' : 'bi bi-heart';
+    if (count) count.textContent = data.count;
+}
+
+async function shareHighlight(title, url) {
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: `麻将高光时刻：${title}`, url });
+            return;
+        } catch (_) {}
+    }
+    // Fallback: copy to clipboard
+    try {
+        await navigator.clipboard.writeText(url);
+        showToast('链接已复制到剪贴板！', 'success');
+    } catch (_) {
+        prompt('复制以下链接分享：', url);
+    }
+}
+</script>
+{% endblock %}

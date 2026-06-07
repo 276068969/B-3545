@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}麻将战绩{% endblock %} | 麻将战绩排行榜</title>
+    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/static/css/style.css" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" id="mainNav">
+        <div class="container-fluid px-3">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+                <span class="brand-tile">🀄</span>
+                <span class="brand-text">麻将战绩</span>
+            </a>
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarMain">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="/">
+                            <i class="bi bi-house"></i> 首页
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-trophy"></i> 排行榜
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item" href="/leaderboard/"><i class="bi bi-bar-chart"></i> 总排行榜</a></li>
+                            <li><a class="dropdown-item" href="/leaderboard/domination/"><i class="bi bi-lightning-charge"></i> 全场通吃榜</a></li>
+                            <li><a class="dropdown-item" href="/leaderboard/comeback/"><i class="bi bi-arrow-counterclockwise"></i> 反败为胜榜</a></li>
+                            <li><a class="dropdown-item" href="/leaderboard/highlights/"><i class="bi bi-stars"></i> 高光时刻</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/leaderboard/vs/"><i class="bi bi-people"></i> 玩家对比</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'games' in request.path %}active{% endif %}" href="/games/">
+                            <i class="bi bi-journal-text"></i> 战绩列表
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if 'rooms' in request.path %}active{% endif %}" href="/rooms/">
+                            <i class="bi bi-door-open"></i> 游戏房间
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                    {% if user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link btn-record" href="/games/create/">
+                            <i class="bi bi-plus-circle"></i> 录入战绩
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown">
+                            <img src="{{ user.get_avatar_url }}" alt="avatar" class="nav-avatar">
+                            <span>{{ user.get_display_name }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                            <li><a class="dropdown-item" href="/accounts/profile/"><i class="bi bi-person"></i> 我的主页</a></li>
+                            <li><a class="dropdown-item" href="/accounts/profile/edit/"><i class="bi bi-pencil"></i> 编辑资料</a></li>
+                            <li><a class="dropdown-item" href="/games/?player={{ user.pk }}"><i class="bi bi-list-ul"></i> 我的战绩</a></li>
+                            {% if user.is_staff %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/games/backup/"><i class="bi bi-shield-lock"></i> 数据备份</a></li>
+                            <li><a class="dropdown-item" href="/games/restore/"><i class="bi bi-arrow-counterclockwise"></i> 数据恢复</a></li>
+                            <li><a class="dropdown-item" href="/admin/"><i class="bi bi-gear"></i> 后台管理</a></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="/accounts/logout/">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item text-danger">
+                                        <i class="bi bi-box-arrow-right"></i> 退出登录
+                                    </button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/accounts/login/"><i class="bi bi-box-arrow-in-right"></i> 登录</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link btn-register" href="/accounts/register/"><i class="bi bi-person-plus"></i> 注册</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Toast Messages -->
+    {% if messages %}
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:9999; margin-top:70px">
+        {% for message in messages %}
+        <div class="toast show align-items-center text-white border-0
+            {% if message.tags == 'error' %}bg-danger
+            {% elif message.tags == 'warning' %}bg-warning text-dark
+            {% elif message.tags == 'success' %}bg-success
+            {% else %}bg-info{% endif %}"
+            role="alert" data-bs-delay="5000" data-bs-autohide="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi bi-{% if message.tags == 'error' %}x-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
+                    {{ message }}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto py-4">
+        <div class="container text-center">
+            <p class="text-muted mb-1">
+                🀄 麻将战绩排行榜 &nbsp;|&nbsp;
+                <a href="/leaderboard/" class="footer-link">排行榜</a> &nbsp;|&nbsp;
+                <a href="/games/" class="footer-link">战绩</a> &nbsp;|&nbsp;
+                <a href="/rooms/" class="footer-link">房间</a>
+            </p>
+            <p class="text-muted small mb-0">记录每一局精彩，见证每一次逆转</p>
+        </div>
+    </footer>
+
+    <!-- Global Confirm Modal -->
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+            <div class="modal-content" style="background:#1a2f3e;border:1px solid #2d4a5e">
+                <div class="modal-body p-4">
+                    <div class="d-flex align-items-start gap-3">
+                        <i class="bi bi-exclamation-circle text-warning fs-4 flex-shrink-0 mt-1"></i>
+                        <div id="confirmModalMsg" class="text-light" style="font-size:15px;line-height:1.6"></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary p-3 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="confirmModalOk">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Alert Modal -->
+    <div class="modal fade" id="alertModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+            <div class="modal-content" style="background:#1a2f3e;border:1px solid #2d4a5e">
+                <div class="modal-body p-4">
+                    <div class="d-flex align-items-start gap-3">
+                        <i id="alertModalIcon" class="bi bi-info-circle text-warning fs-4 flex-shrink-0 mt-1"></i>
+                        <div id="alertModalMsg" class="text-light" style="font-size:15px;line-height:1.6"></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary p-3 pt-0">
+                    <button type="button" class="btn btn-gold px-4" data-bs-dismiss="modal">知道了</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <!-- Custom JS -->
+    <script src="/static/js/main.js"></script>
+    {% block extra_js %}{% endblock %}
+
+    <script>
+        // Auto-dismiss toasts
+        document.querySelectorAll('.toast').forEach(t => {
+            const toast = new bootstrap.Toast(t, {delay: 5000});
+            toast.show();
+        });
+    </script>
+</body>
+</html>

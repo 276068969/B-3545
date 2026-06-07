@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}游戏房间{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h3 class="mb-0"><i class="bi bi-door-open text-gold"></i> 游戏房间</h3>
+            {% if user.is_authenticated %}
+            <a href="/rooms/create/" class="btn btn-gold"><i class="bi bi-plus-circle"></i> 创建房间</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Join by code -->
+    {% if user.is_authenticated %}
+    <div class="card-dark mb-4">
+        <div class="card-body-dark py-3">
+            <form method="post" action="/rooms/join-by-code/" class="d-flex gap-2">
+                {% csrf_token %}
+                <input type="text" name="code" class="form-control" placeholder="输入房间码加入..." style="max-width:200px" maxlength="10">
+                <button type="submit" class="btn btn-outline-gold">
+                    <i class="bi bi-door-open"></i> 加入
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Room List -->
+    <div class="row g-3">
+        {% for room in rooms %}
+        <div class="col-md-6 col-lg-4">
+            <div class="room-card h-100 p-3">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="text-light mb-0">{{ room.name }}</h6>
+                    <span class="badge {% if room.status == 'waiting' %}bg-success{% elif room.status == 'playing' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                        {{ room.get_status_display }}
+                    </span>
+                </div>
+
+                <div class="text-muted small mb-2">
+                    <i class="bi bi-tag"></i> {{ room.code }}
+                    &nbsp;|&nbsp;
+                    <i class="bi bi-joystick"></i> {{ room.get_game_type_display }}
+                    &nbsp;|&nbsp;
+                    <i class="bi bi-coin"></i> {{ room.base_score }}元/分
+                </div>
+
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <img src="{{ room.host.get_avatar_url }}" class="mini-avatar">
+                    <span class="text-muted small">房主: {{ room.host.get_display_name }}</span>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="text-muted small">
+                        <i class="bi bi-people"></i>
+                        {{ room.get_player_count }} / {{ room.max_players }} 人
+                    </div>
+                    <a href="/rooms/{{ room.pk }}/" class="btn btn-sm btn-outline-gold">进入房间</a>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-door-closed fs-1"></i>
+                <p class="mt-3">暂无开放中的房间</p>
+                {% if user.is_authenticated %}
+                <a href="/rooms/create/" class="btn btn-gold mt-2">
+                    <i class="bi bi-plus-circle"></i> 创建第一个房间
+                </a>
+                {% else %}
+                <a href="/accounts/login/" class="btn btn-outline-gold mt-2">登录后创建房间</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% block title %}反败为胜榜{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-arrow-counterclockwise text-info"></i> 反败为胜榜</h3>
+        <p class="text-muted mt-1">记录那些绝境逢生、逆流而上的传奇时刻</p>
+    </div>
+
+    <div class="row g-4">
+        <!-- Comeback Kings -->
+        {% if top_comeback_kings %}
+        <div class="col-lg-4">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-trophy text-info"></i> 逆转王排行</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for ck in top_comeback_kings %}
+                    <div class="player-row d-flex align-items-center p-2 mb-2 rounded">
+                        <div class="rank-badge rank-{{ forloop.counter }}">{{ forloop.counter }}</div>
+                        <img src="{{ ck.user.get_avatar_url }}" class="player-avatar mx-2">
+                        <div class="flex-grow-1">
+                            <a href="/accounts/profile/{{ ck.user.username }}/" class="player-name">{{ ck.user.get_display_name }}</a>
+                        </div>
+                        <div class="text-end">
+                            <div class="text-info fw-bold">{{ ck.count }} 次</div>
+                            <div class="text-muted small">最大 -{{ ck.max_deficit }}→赢</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Comeback Records -->
+        <div class="col-lg-8">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-list-ul text-info"></i> 逆转记录</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for item in comebacks_with_charts %}
+                    {% with cb=item.highlight %}
+                    <div class="comeback-card p-3 mb-3 rounded">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-arrow-counterclockwise text-info fs-5"></i>
+                                <a href="/games/{{ cb.game.pk }}/" class="text-light fw-bold">
+                                    {{ cb.game.game_time|date:"Y年m月d日 H:i" }}
+                                </a>
+                            </div>
+                            <span class="highlight-score-badge">精彩 {{ cb.highlight_score }}</span>
+                        </div>
+
+                        <div class="mt-2 d-flex align-items-center gap-3">
+                            <img src="{{ cb.winner.get_avatar_url }}" class="player-avatar">
+                            <div>
+                                <div class="fw-bold text-info">{{ cb.winner.get_display_name }}</div>
+                                <div class="mt-1">{{ cb.title }}</div>
+                                {% if cb.comeback_deficit > 0 %}
+                                <div class="comeback-deficit mt-1">
+                                    <i class="bi bi-arrow-down-right text-loss"></i>
+                                    最大落后 <span class="text-loss fw-bold">{{ cb.comeback_deficit }}</span> 分
+                                    <i class="bi bi-arrow-right mx-1 text-muted"></i>
+                                    <i class="bi bi-arrow-up-right text-win"></i>
+                                    最终获胜
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if cb.description %}
+                        <div class="text-muted small mt-2">{{ cb.description }}</div>
+                        {% endif %}
+
+                        <!-- Score Trend Chart -->
+                        {% if item.chart_json %}
+                        <div class="mt-3">
+                            <canvas class="comeback-chart" data-chart='{{ item.chart_json }}'
+                                    style="height:140px;max-width:100%"></canvas>
+                        </div>
+                        {% endif %}
+
+                        <!-- Players in this game -->
+                        <div class="mt-2 d-flex gap-2 flex-wrap">
+                            {% for gp in cb.game.players.all %}
+                            <span class="player-score-tag {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
+                                {{ gp.user.get_display_name }}: {{ gp.score|stringformat:"+d" }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endwith %}
+                    {% empty %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-arrow-counterclockwise fs-1"></i>
+                        <p class="mt-2">暂无逆转记录</p>
+                        <p class="small">录入中途分数快照即可自动识别逆转场次</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const CHART_COLORS = ['#4fc3f7','#c9a227','#4caf50','#ef5350','#ab47bc','#26a69a'];
+document.querySelectorAll('.comeback-chart').forEach((canvas, idx) => {
+    try {
+        const raw = canvas.getAttribute('data-chart');
+        const chartData = JSON.parse(raw);
+        const datasets = chartData.datasets.map((ds, i) => ({
+            label: ds.label,
+            data: ds.data,
+            borderColor: CHART_COLORS[i % CHART_COLORS.length],
+            backgroundColor: 'transparent',
+            pointBackgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+            tension: 0.3,
+            fill: false,
+        }));
+        new Chart(canvas, {
+            type: 'line',
+            data: { labels: chartData.labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#b8cfe4', font: { size: 11 } } },
+                },
+                scales: {
+                    x: { ticks: { color: '#7a9db5' }, grid: { color: 'rgba(255,255,255,.07)' } },
+                    y: {
+                        ticks: { color: '#7a9db5' },
+                        grid: { color: 'rgba(255,255,255,.07)' },
+                        beginAtZero: false,
+                    },
+                },
+            },
+        });
+    } catch (e) { console.warn('chart init failed', e); }
+});
+</script>
+{% endblock %}

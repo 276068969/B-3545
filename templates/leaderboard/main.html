@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+{% block title %}总排行榜{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-trophy text-gold"></i> 总排行榜</h3>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="card-dark mb-4">
+        <div class="card-body-dark py-3">
+            <form method="get" id="lbFilterForm">
+                <div class="row g-2 align-items-end">
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-muted small mb-1">排序指标</label>
+                        <select name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                            {% for value, label in sort_options %}
+                            <option value="{{ value }}" {% if sort_by == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-muted small mb-1">排序方向</label>
+                        <select name="order" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="desc" {% if order == 'desc' %}selected{% endif %}>从高到低</option>
+                            <option value="asc" {% if order == 'asc' %}selected{% endif %}>从低到高</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-muted small mb-1">时间范围</label>
+                        <select name="date_filter" class="form-select form-select-sm" id="dateFilterSelect" onchange="toggleCustomDate(this); this.form.submit()">
+                            <option value="" {% if not date_filter %}selected{% endif %}>全部时间</option>
+                            <option value="today" {% if date_filter == 'today' %}selected{% endif %}>今天</option>
+                            <option value="week" {% if date_filter == 'week' %}selected{% endif %}>本周</option>
+                            <option value="month" {% if date_filter == 'month' %}selected{% endif %}>本月</option>
+                            <option value="custom" {% if date_filter == 'custom' %}selected{% endif %}>自定义</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2 custom-date-field" id="dateFromField" style="display:{% if date_filter == 'custom' %}block{% else %}none{% endif %}">
+                        <label class="form-label text-muted small mb-1">开始日期</label>
+                        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+                    </div>
+                    <div class="col-6 col-md-2 custom-date-field" id="dateToField" style="display:{% if date_filter == 'custom' %}block{% else %}none{% endif %}">
+                        <label class="form-label text-muted small mb-1">结束日期</label>
+                        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-muted small mb-1">游戏类型</label>
+                        <select name="game_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">全部类型</option>
+                            {% for value, label in game_type_choices %}
+                            <option value="{{ value }}" {% if game_type == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-muted small mb-1">包含玩家</label>
+                        <select name="player" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">全部玩家</option>
+                            {% for u in all_users %}
+                            <option value="{{ u.pk }}" {% if player_filter == u.pk|stringformat:"s" %}selected{% endif %}>
+                                {{ u.get_display_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label text-muted small mb-1">最少场次</label>
+                        <select name="min_games" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="1" {% if min_games == 1 %}selected{% endif %}>1场+</option>
+                            <option value="3" {% if min_games == 3 %}selected{% endif %}>3场+</option>
+                            <option value="5" {% if min_games == 5 %}selected{% endif %}>5场+</option>
+                            <option value="10" {% if min_games == 10 %}selected{% endif %}>10场+</option>
+                        </select>
+                    </div>
+                    {% if date_filter == 'custom' %}
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-gold btn-sm">
+                            <i class="bi bi-search"></i> 查询
+                        </button>
+                    </div>
+                    {% endif %}
+                    {% if date_filter or game_type or player_filter %}
+                    <div class="col-auto">
+                        <a href="/leaderboard/" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-x"></i> 重置
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Leaderboard Table -->
+    <div class="card-dark">
+        <div class="card-body-dark p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0 leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th class="text-center" style="width:50px">排名</th>
+                            <th>玩家</th>
+                            {% for value, label in sort_options %}
+                            <th class="text-center sortable {% if sort_by == value %}active-sort{% endif %}">
+                                <a href="?sort={{ value }}&order={% if sort_by == value and order == 'desc' %}asc{% else %}desc{% endif %}&min_games={{ min_games }}&date_filter={{ date_filter }}&date_from={{ date_from }}&date_to={{ date_to }}&game_type={{ game_type }}&player={{ player_filter }}" class="sort-link">
+                                    {{ label }}
+                                    {% if sort_by == value %}
+                                    <i class="bi bi-arrow-{% if order == 'desc' %}down{% else %}up{% endif %} text-gold"></i>
+                                    {% endif %}
+                                </a>
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stats in stats_list %}
+                        <tr class="leaderboard-row">
+                            <td class="text-center">
+                                <div class="rank-badge-lg">
+                                    {% if forloop.counter == 1 %}🥇
+                                    {% elif forloop.counter == 2 %}🥈
+                                    {% elif forloop.counter == 3 %}🥉
+                                    {% else %}{{ forloop.counter }}{% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% with u=stats.user_obj %}
+                                <a href="/accounts/profile/{{ u.username }}/" class="d-flex align-items-center gap-2 text-decoration-none">
+                                    <img src="{{ u.get_avatar_url }}" class="lb-avatar" alt="">
+                                    <div>
+                                        <div class="lb-name">{{ u.get_display_name }}</div>
+                                        {% if stats.current_consecutive_wins > 0 %}
+                                        <span class="streak-badge win-streak">连胜{{ stats.current_consecutive_wins }}</span>
+                                        {% elif stats.current_consecutive_losses > 0 %}
+                                        <span class="streak-badge loss-streak">连败{{ stats.current_consecutive_losses }}</span>
+                                        {% endif %}
+                                    </div>
+                                </a>
+                                {% endwith %}
+                            </td>
+                            <!-- win_rate -->
+                            <td class="text-center">
+                                <div class="win-rate-cell">
+                                    <span class="win-rate-value {% if stats.win_rate >= 60 %}text-win{% elif stats.win_rate <= 30 %}text-loss{% else %}text-muted{% endif %}">
+                                        {{ stats.win_rate|floatformat:1 }}%
+                                    </span>
+                                    <div class="win-rate-bar">
+                                        <div class="win-rate-fill" style="width:{{ stats.win_rate }}%"></div>
+                                    </div>
+                                </div>
+                            </td>
+                            <!-- total_games -->
+                            <td class="text-center text-muted">{{ stats.total_games }}</td>
+                            <!-- wins -->
+                            <td class="text-center text-win">{{ stats.wins }}</td>
+                            <!-- total_score -->
+                            <td class="text-center fw-bold {% if stats.total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ stats.total_score|stringformat:"+d" }}
+                            </td>
+                            <!-- avg_score -->
+                            <td class="text-center {% if stats.avg_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                                {{ stats.avg_score|floatformat:1 }}
+                            </td>
+                            <!-- max_score -->
+                            <td class="text-center text-muted">{{ stats.max_score }}</td>
+                            <!-- max_consecutive_wins -->
+                            <td class="text-center">
+                                {% if stats.max_consecutive_wins %}
+                                <span class="text-gold">{{ stats.max_consecutive_wins }}</span>
+                                {% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+                            <!-- max_consecutive_losses -->
+                            <td class="text-center">
+                                {% if stats.max_consecutive_losses %}
+                                <span class="text-loss">{{ stats.max_consecutive_losses }}</span>
+                                {% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+                            <!-- domination_count -->
+                            <td class="text-center">
+                                {% if stats.domination_count %}
+                                <span class="badge bg-gold text-dark">{{ stats.domination_count }}</span>
+                                {% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+                            <!-- comeback_count -->
+                            <td class="text-center">
+                                {% if stats.comeback_count %}
+                                <span class="text-info">{{ stats.comeback_count }}</span>
+                                {% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="12" class="text-center py-5 text-muted">
+                                <i class="bi bi-person-x fs-1"></i>
+                                <p class="mt-2">没有符合条件的玩家数据</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Special Boards Links -->
+    <div class="row g-3 mt-4">
+        <div class="col-md-4">
+            <a href="/leaderboard/domination/" class="special-board-link d-block p-3 rounded text-center text-decoration-none">
+                <i class="bi bi-lightning-charge fs-2 text-gold"></i>
+                <div class="mt-2 text-light fw-bold">全场通吃榜</div>
+                <div class="text-muted small">一人独赢的高光时刻</div>
+            </a>
+        </div>
+        <div class="col-md-4">
+            <a href="/leaderboard/comeback/" class="special-board-link d-block p-3 rounded text-center text-decoration-none">
+                <i class="bi bi-arrow-counterclockwise fs-2 text-info"></i>
+                <div class="mt-2 text-light fw-bold">反败为胜榜</div>
+                <div class="text-muted small">逆转胜利的传奇故事</div>
+            </a>
+        </div>
+        <div class="col-md-4">
+            <a href="/leaderboard/highlights/" class="special-board-link d-block p-3 rounded text-center text-decoration-none">
+                <i class="bi bi-stars fs-2 text-warning"></i>
+                <div class="mt-2 text-light fw-bold">高光时刻集锦</div>
+                <div class="text-muted small">精彩时刻一网打尽</div>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleCustomDate(sel) {
+    const show = sel.value === 'custom';
+    document.querySelectorAll('.custom-date-field').forEach(el => {
+        el.style.display = show ? 'block' : 'none';
+    });
+    if (!show) document.getElementById('lbFilterForm').submit();
+}
+</script>
+{% endblock %}

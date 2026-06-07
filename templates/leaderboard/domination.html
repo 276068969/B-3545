@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block title %}全场通吃榜{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-lightning-charge text-gold"></i> 全场通吃榜</h3>
+        <p class="text-muted mt-1">只有一个大赢家，其余玩家全部负分的特殊局</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="stat-card text-center">
+                <div class="stat-number text-gold">{{ total_dominations }}</div>
+                <div class="stat-label">全场通吃总次数</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Top Dominators -->
+        {% if top_dominators %}
+        <div class="col-lg-4">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-crown text-gold"></i> 通吃王排行</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for d in top_dominators %}
+                    <div class="player-row d-flex align-items-center p-2 mb-2 rounded">
+                        <div class="rank-badge rank-{{ forloop.counter }}">{{ forloop.counter }}</div>
+                        <img src="{{ d.user.get_avatar_url }}" class="player-avatar mx-2">
+                        <div class="flex-grow-1">
+                            <a href="/accounts/profile/{{ d.user.username }}/" class="player-name">{{ d.user.get_display_name }}</a>
+                        </div>
+                        <div class="text-end">
+                            <div class="text-gold fw-bold">{{ d.count }} 次</div>
+                            <div class="text-muted small">最高 {{ d.best_score }}分</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Domination Games -->
+        <div class="col-lg-8">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-list-ul text-gold"></i> 通吃记录</h6>
+                </div>
+                <div class="card-body-dark">
+                    {% for dg in domination_games %}
+                    <div class="domination-card p-3 mb-3 rounded">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-lightning-charge text-gold fs-5"></i>
+                                <a href="/games/{{ dg.game.pk }}/" class="text-light fw-bold">
+                                    {{ dg.game.game_time|date:"Y年m月d日 H:i" }}
+                                </a>
+                                {% if dg.game.location %}
+                                <span class="text-muted small"><i class="bi bi-geo-alt"></i> {{ dg.game.location }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- Winner -->
+                            <div class="domination-winner text-center p-2 rounded">
+                                <img src="{{ dg.winner.user.get_avatar_url }}" class="result-avatar mb-1">
+                                <div class="fw-bold text-gold">{{ dg.winner.user.get_display_name }}</div>
+                                <div class="domination-score">+{{ dg.winner.score }}</div>
+                                <span class="badge bg-gold text-dark">全场通吃</span>
+                            </div>
+
+                            <div class="text-muted fs-4">VS</div>
+
+                            <!-- Losers -->
+                            <div class="d-flex gap-2 flex-wrap">
+                                {% for loser in dg.losers %}
+                                <div class="text-center p-2">
+                                    <img src="{{ loser.user.get_avatar_url }}" class="mini-avatar mb-1">
+                                    <div class="text-muted small">{{ loser.user.get_display_name }}</div>
+                                    <div class="text-loss small fw-bold">{{ loser.score }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mt-2 text-muted small">
+                            对手共输 {{ dg.total_loss }} 分
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-lightning fs-1"></i>
+                        <p class="mt-2">还没有全场通吃的记录</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
