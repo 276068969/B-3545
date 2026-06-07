@@ -588,10 +588,13 @@ def pattern_stats(request):
     order = request.GET.get('order', 'desc')
     limit_str = request.GET.get('limit', '50')
 
+    errors = []
+
     try:
         limit = max(1, min(int(limit_str), 200))
     except (ValueError, TypeError):
         limit = 50
+        errors.append('limit 参数格式有误，已使用默认值 50')
 
     qs = GamePlayerPattern.objects.select_related(
         'tile_pattern', 'game_player', 'game_player__game', 'game_player__user'
@@ -604,7 +607,7 @@ def pattern_stats(request):
             date_from = timezone.make_aware(datetime.strptime(date_from_str, '%Y-%m-%d'))
             qs = qs.filter(game_player__game__game_time__gte=date_from)
         except ValueError:
-            pass
+            errors.append('date_from 格式有误，应为 YYYY-MM-DD，已忽略')
 
     if date_to_str:
         try:
@@ -613,40 +616,67 @@ def pattern_stats(request):
             )
             qs = qs.filter(game_player__game__game_time__lte=date_to)
         except ValueError:
-            pass
+            errors.append('date_to 格式有误，应为 YYYY-MM-DD，已忽略')
 
     if category:
-        qs = qs.filter(tile_pattern__category=category)
+        valid_categories = [c[0] for c in TilePattern.CATEGORY_CHOICES]
+        if category in valid_categories:
+            qs = qs.filter(tile_pattern__category=category)
+        else:
+            errors.append(f'category 参数无效，有效值为 {", ".join(valid_categories)}，已忽略')
 
+    min_fan = None
     if min_fan_str:
         try:
             min_fan = int(min_fan_str)
-            qs = qs.filter(tile_pattern__fan_count__gte=min_fan)
+            if min_fan < 1:
+                errors.append('min_fan 不能小于 1，已忽略')
+                min_fan = None
+            else:
+                qs = qs.filter(tile_pattern__fan_count__gte=min_fan)
         except (ValueError, TypeError):
-            pass
+            errors.append('min_fan 格式有误，应为正整数，已忽略')
 
+    max_fan = None
     if max_fan_str:
         try:
             max_fan = int(max_fan_str)
-            qs = qs.filter(tile_pattern__fan_count__lte=max_fan)
+            if max_fan < 1:
+                errors.append('max_fan 不能小于 1，已忽略')
+                max_fan = None
+            elif min_fan is not None and max_fan < min_fan:
+                errors.append('max_fan 不能小于 min_fan，已忽略')
+                max_fan = None
+            else:
+                qs = qs.filter(tile_pattern__fan_count__lte=max_fan)
         except (ValueError, TypeError):
-            pass
+            errors.append('max_fan 格式有误，应为正整数，已忽略')
 
+    player_id = None
     if player_id_str:
         try:
             player_id = int(player_id_str)
-            qs = qs.filter(game_player__user_id=player_id)
+            if player_id < 1:
+                errors.append('player_id 不能小于 1，已忽略')
+                player_id = None
+            else:
+                if not User.objects.filter(pk=player_id).exists():
+                    errors.append(f'player_id={player_id} 玩家不存在，已忽略')
+                    player_id = None
+                else:
+                    qs = qs.filter(game_player__user_id=player_id)
         except (ValueError, TypeError):
-            pass
+            errors.append('player_id 格式有误，应为正整数，已忽略')
+
+    if group_by not in ('pattern', 'category', 'player'):
+        return JsonResponse({'error': 'Invalid group_by value', 'errors': errors}, status=400)
 
     if group_by == 'pattern':
         stats = _get_pattern_grouped_stats(qs, sort_by, order, limit)
     elif group_by == 'category':
         stats = _get_category_grouped_stats(qs, sort_by, order, limit)
-    elif group_by == 'player':
-        stats = _get_player_grouped_stats(qs, sort_by, order, limit)
     else:
-        return JsonResponse({'error': 'Invalid group_by value'}, status=400)
+        stats = _get_player_grouped_stats(qs, sort_by, order, limit)
 
     return JsonResponse({
         'group_by': group_by,
@@ -656,10 +686,11 @@ def pattern_stats(request):
             'date_from': date_from_str or None,
             'date_to': date_to_str or None,
             'category': category or None,
-            'min_fan': int(min_fan_str) if min_fan_str else None,
-            'max_fan': int(max_fan_str) if max_fan_str else None,
-            'player_id': int(player_id_str) if player_id_str else None,
+            'min_fan': min_fan,
+            'max_fan': max_fan,
+            'player_id': player_id,
         },
+        'warnings': errors if errors else [],
     })
 
 
@@ -757,9 +788,31 @@ def _get_category_grouped_stats(qs, sort_by, order, limit):
     order_expr = sort_field if order == 'asc' else f'-{sort_field}'
     agg = agg.order_by(order_expr)
 
+    categories = [item['tile_pattern__category'] for item in agg]
+    highest_score_map = {}
+    if categories:
+        for cat in categories:
+            top_pattern = qs.filter(
+                tile_pattern__category=cat
+            ).select_related(
+                'game_player__user', 'tile_pattern'
+            ).order_by(
+                '-game_player__score', '-game_player__game__game_time'
+            ).first()
+            if top_pattern:
+                highest_score_map[cat] = {
+                    'player_id': top_pattern.game_player.user_id,
+                    'player_name': top_pattern.game_player.user.get_display_name(),
+                    'game_id': top_pattern.game_player.game_id,
+                    'pattern_id': top_pattern.tile_pattern_id,
+                    'pattern_name': top_pattern.tile_pattern.name,
+                    'score': top_pattern.game_player.score,
+                }
+
     result = []
     for item in agg:
         cat = item['tile_pattern__category']
+        highest_info = highest_score_map.get(cat, {})
         result.append({
             'category': cat,
             'category_name': dict(TilePattern.CATEGORY_CHOICES).get(cat, ''),
@@ -768,6 +821,11 @@ def _get_category_grouped_stats(qs, sort_by, order, limit):
             'pattern_count': item['pattern_count'],
             'last_occurrence': item['last_occurrence'].isoformat() if item['last_occurrence'] else None,
             'highest_score': item['highest_score'] or 0,
+            'highest_score_player': highest_info.get('player_name', ''),
+            'highest_score_player_id': highest_info.get('player_id'),
+            'highest_score_pattern': highest_info.get('pattern_name', ''),
+            'highest_score_pattern_id': highest_info.get('pattern_id'),
+            'highest_score_game_id': highest_info.get('game_id'),
             'total_fan': item['total_fan'] or 0,
         })
     return result
@@ -802,7 +860,9 @@ def _get_player_grouped_stats(qs, sort_by, order, limit):
     agg = agg.order_by(order_expr)
 
     player_ids = [item['game_player__user_id'] for item in agg[:limit]]
+
     favorite_map = {}
+    highest_score_map = {}
     if player_ids:
         for uid in player_ids:
             fav = qs.filter(
@@ -813,10 +873,27 @@ def _get_player_grouped_stats(qs, sort_by, order, limit):
             if fav:
                 favorite_map[uid] = fav['tile_pattern__name']
 
+            top_pattern = qs.filter(
+                game_player__user_id=uid
+            ).select_related(
+                'tile_pattern'
+            ).order_by(
+                '-game_player__score', '-game_player__game__game_time'
+            ).first()
+            if top_pattern:
+                highest_score_map[uid] = {
+                    'pattern_id': top_pattern.tile_pattern_id,
+                    'pattern_name': top_pattern.tile_pattern.name,
+                    'pattern_category': top_pattern.tile_pattern.category,
+                    'game_id': top_pattern.game_player.game_id,
+                    'score': top_pattern.game_player.score,
+                }
+
     result = []
     for item in agg[:limit]:
         uid = item['game_player__user_id']
         display_name = item['game_player__user__nickname'] or item['game_player__user__username']
+        highest_info = highest_score_map.get(uid, {})
         result.append({
             'player_id': uid,
             'player_name': display_name,
@@ -825,6 +902,10 @@ def _get_player_grouped_stats(qs, sort_by, order, limit):
             'category_count': item['category_count'],
             'last_occurrence': item['last_occurrence'].isoformat() if item['last_occurrence'] else None,
             'highest_score': item['highest_score'] or 0,
+            'highest_score_pattern': highest_info.get('pattern_name', ''),
+            'highest_score_pattern_id': highest_info.get('pattern_id'),
+            'highest_score_pattern_category': highest_info.get('pattern_category', ''),
+            'highest_score_game_id': highest_info.get('game_id'),
             'total_fan': item['total_fan'] or 0,
             'favorite_pattern': favorite_map.get(uid, ''),
         })
