@@ -100,7 +100,7 @@
         </div>
 
         <!-- Visualization Charts -->
-        {% if comparison.chart_data_json %}
+        {% if comparison.total > 0 %}
         <div class="col-lg-8">
             <div class="card-dark">
                 <div class="card-header-dark">
@@ -126,7 +126,7 @@
         <div class="col-12">
             <div class="card-dark">
                 <div class="card-header-dark">
-                    <h6 class="mb-0"><i class="bi bi-activity text-gold"></i> 近期波动（单场得分差）</h6>
+                    <h6 class="mb-0"><i class="bi bi-activity text-gold"></i> 近期得分波动（分差：正值 {{ comparison.p1.get_display_name }} 胜）</h6>
                 </div>
                 <div class="card-body-dark">
                     <canvas id="scoreDiffChart" height="100"></canvas>
@@ -192,7 +192,7 @@
 
 {% block extra_js %}
 <script>
-{% if comparison and comparison.chart_data_json %}
+{% if comparison and comparison.total > 0 %}
 const chartData = {{ comparison.chart_data_json|safe }};
 const p1Name = "{{ comparison.p1.get_display_name }}";
 const p2Name = "{{ comparison.p2.get_display_name }}";
@@ -335,22 +335,16 @@ const chartDefaults = {
 (function initScoreDiffChart() {
     const ctx = document.getElementById('scoreDiffChart');
     if (!ctx || !chartData.score_labels.length) return;
+    const diffData = chartData.score_diff_data;
     new Chart(ctx, {
         type: 'bar',
         data: {
             labels: chartData.score_labels,
             datasets: [{
-                label: p1Name + ' 得分',
-                data: chartData.p1_score_data,
-                backgroundColor: chartData.p1_score_data.map(v => v >= 0 ? 'rgba(201,162,39,0.7)' : 'rgba(201,162,39,0.35)'),
-                borderColor: P1_COLOR,
-                borderWidth: 1,
-                borderRadius: 4,
-            }, {
-                label: p2Name + ' 得分',
-                data: chartData.p2_score_data,
-                backgroundColor: chartData.p2_score_data.map(v => v >= 0 ? 'rgba(52,152,219,0.7)' : 'rgba(52,152,219,0.35)'),
-                borderColor: P2_COLOR,
+                label: '分差（正值 ' + p1Name + ' 胜）',
+                data: diffData,
+                backgroundColor: diffData.map(v => v > 0 ? 'rgba(201,162,39,0.75)' : (v < 0 ? 'rgba(52,152,219,0.75)' : 'rgba(108,117,125,0.6)')),
+                borderColor: diffData.map(v => v > 0 ? P1_COLOR : (v < 0 ? P2_COLOR : DRAW_COLOR)),
                 borderWidth: 1,
                 borderRadius: 4,
             }]
@@ -359,14 +353,21 @@ const chartDefaults = {
             ...chartDefaults,
             plugins: {
                 ...chartDefaults.plugins,
+                legend: { display: false },
                 tooltip: {
-                    mode: 'index',
-                    intersect: false,
                     backgroundColor: 'rgba(0,0,0,0.85)',
                     titleColor: '#fff',
                     bodyColor: '#ddd',
                     borderColor: 'rgba(201,162,39,0.3)',
                     borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            const val = context.parsed.y;
+                            if (val > 0) return ` ${p1Name} 赢 ${val} 分`;
+                            if (val < 0) return ` ${p2Name} 赢 ${Math.abs(val)} 分`;
+                            return ' 平局';
+                        }
+                    }
                 }
             },
             scales: {
