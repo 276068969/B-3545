@@ -429,12 +429,14 @@ def export_games(request):
 @login_required
 @require_POST
 def collect_highlight(request, pk):
+    from .models import HighlightCollection
     highlight = get_object_or_404(Highlight, pk=pk)
-    if request.user in highlight.collected_by.all():
-        highlight.collected_by.remove(request.user)
+    collection = HighlightCollection.objects.filter(highlight=highlight, user=request.user).first()
+    if collection:
+        collection.delete()
         collected = False
     else:
-        highlight.collected_by.add(request.user)
+        HighlightCollection.objects.create(highlight=highlight, user=request.user)
         collected = True
     return JsonResponse({'collected': collected, 'count': highlight.collected_by.count()})
 

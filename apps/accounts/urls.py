@@ -10,5 +10,6 @@ urlpatterns = [
     path('profile/', views.profile_view, name='profile'),
     path('profile/edit/', views.edit_profile, name='edit_profile'),
     path('profile/avatar/', views.upload_avatar, name='upload_avatar'),
+    path('profile/highlights/', views.my_collected_highlights, name='my_highlights'),
     path('profile/<str:username>/', views.profile_view, name='user_profile'),
 ]

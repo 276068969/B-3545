@@ -105,6 +105,14 @@
                             <div class="stat-value text-info">{{ stats.comeback_count }}</div>
                             <div class="stat-name">逆转胜利</div>
                         </div>
+                        {% if is_own_profile %}
+                        <div class="stat-item">
+                            <a href="{% url 'accounts:my_highlights' %}" class="text-decoration-none">
+                                <div class="stat-value text-danger">{{ collected_count }}</div>
+                                <div class="stat-name">收藏高光 <i class="bi bi-arrow-right-short small"></i></div>
+                            </a>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <!-- Win Rate Bar -->

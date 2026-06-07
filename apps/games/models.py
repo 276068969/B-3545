@@ -156,6 +156,28 @@ class GameSnapshot(models.Model):
         ordering = ['round_number']
 
 
+class HighlightCollection(models.Model):
+    """高光收藏关系"""
+    highlight = models.ForeignKey(
+        'Highlight', on_delete=models.CASCADE,
+        related_name='collections', verbose_name='高光'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='highlight_collections', verbose_name='用户'
+    )
+    created_at = models.DateTimeField('收藏时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '高光收藏'
+        verbose_name_plural = '高光收藏列表'
+        unique_together = ('highlight', 'user')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.get_display_name()} 收藏了 {self.highlight.title}'
+
+
 class Highlight(models.Model):
     """高光时刻记录"""
     HIGHLIGHT_TYPE_CHOICES = [
@@ -182,6 +204,7 @@ class Highlight(models.Model):
     is_featured = models.BooleanField('精选', default=False)
     collected_by = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True,
+        through='HighlightCollection',
         related_name='collected_highlights', verbose_name='收藏者'
     )
     created_at = models.DateTimeField('创建时间', auto_now_add=True)

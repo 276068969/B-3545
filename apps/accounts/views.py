@@ -64,6 +64,11 @@ def profile_view(request, username=None):
 
     stats = profile_user.stats
 
+    collected_count = 0
+    if request.user == profile_user:
+        from apps.games.models import HighlightCollection
+        collected_count = HighlightCollection.objects.filter(user=profile_user).count()
+
     # Last 10 games score trend
     score_trend = list(
         GamePlayer.objects.filter(
@@ -79,6 +84,7 @@ def profile_view(request, username=None):
         'stats': stats,
         'score_trend': json.dumps(score_trend),
         'is_own_profile': request.user == profile_user,
+        'collected_count': collected_count,
     }
     return render(request, 'accounts/profile.html', context)
 
@@ -114,3 +120,48 @@ def upload_avatar(request):
     else:
         messages.error(request, '头像上传失败，请选择有效的图片文件。')
     return redirect('accounts:profile')
+
+
+@login_required
+def my_collected_highlights(request):
+    from apps.games.models import Highlight, HighlightCollection
+    from django.core.paginator import Paginator
+
+    sort_by = request.GET.get('sort', 'collect_time')
+    highlight_type = request.GET.get('type', '')
+
+    collections_qs = HighlightCollection.objects.filter(
+        user=request.user
+    ).select_related(
+        'highlight', 'highlight__game', 'highlight__winner'
+    ).prefetch_related(
+        'highlight__game__players__user'
+    )
+
+    if highlight_type:
+        collections_qs = collections_qs.filter(highlight__highlight_type=highlight_type)
+
+    if sort_by == 'score':
+        collections_qs = collections_qs.order_by('-highlight__highlight_score', '-created_at')
+    elif sort_by == 'type':
+        collections_qs = collections_qs.order_by('highlight__highlight_type', '-created_at')
+    else:
+        collections_qs = collections_qs.order_by('-created_at')
+
+    paginator = Paginator(collections_qs, 20)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    params = request.GET.copy()
+    params.pop('page', None)
+    base_query = params.urlencode()
+
+    context = {
+        'page_obj': page_obj,
+        'sort_by': sort_by,
+        'highlight_type': highlight_type,
+        'highlight_type_choices': Highlight.HIGHLIGHT_TYPE_CHOICES,
+        'base_query': base_query,
+        'total_count': collections_qs.count(),
+    }
+    return render(request, 'accounts/my_highlights.html', context)

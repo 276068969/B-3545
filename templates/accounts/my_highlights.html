@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+{% block title %}我的收藏高光{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-heart-fill text-danger"></i> 我的收藏高光</h3>
+        <p class="text-muted mt-1">共收藏 {{ total_count }} 个高光时刻</p>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="d-flex gap-2 flex-wrap mb-4">
+        <a href="{% url 'accounts:my_highlights' %}?sort={{ sort_by }}" class="btn btn-sm {% if not highlight_type %}btn-gold{% else %}btn-outline-secondary{% endif %}">全部</a>
+        {% for value, label in highlight_type_choices %}
+        <a href="{% url 'accounts:my_highlights' %}?sort={{ sort_by }}&type={{ value }}"
+           class="btn btn-sm {% if highlight_type == value %}btn-gold{% else %}btn-outline-secondary{% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+
+        <div class="ms-auto d-flex gap-2">
+            <span class="text-muted small align-self-center">排序：</span>
+            <a href="{% url 'accounts:my_highlights' %}?sort=collect_time&type={{ highlight_type }}" class="btn btn-sm {% if sort_by == 'collect_time' %}btn-outline-gold{% else %}btn-outline-secondary{% endif %}">收藏时间</a>
+            <a href="{% url 'accounts:my_highlights' %}?sort=score&type={{ highlight_type }}" class="btn btn-sm {% if sort_by == 'score' %}btn-outline-gold{% else %}btn-outline-secondary{% endif %}">精彩分</a>
+            <a href="{% url 'accounts:my_highlights' %}?sort=type&type={{ highlight_type }}" class="btn btn-sm {% if sort_by == 'type' %}btn-outline-gold{% else %}btn-outline-secondary{% endif %}">高光类型</a>
+        </div>
+    </div>
+
+    <!-- Highlights Grid -->
+    <div class="row g-3">
+        {% for collection in page_obj %}
+        {% with highlight=collection.highlight %}
+        <div class="col-md-6 col-lg-4 highlight-item" data-id="{{ highlight.pk }}">
+            <div class="highlight-card-full h-100">
+                <!-- Header -->
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <img src="{{ highlight.winner.get_avatar_url }}" class="player-avatar">
+                    <div class="flex-grow-1">
+                        <a href="{% url 'accounts:user_profile' highlight.winner.username %}" class="player-name">
+                            {{ highlight.winner.get_display_name }}
+                        </a>
+                        <div class="text-muted small">
+                            <i class="bi bi-bookmark-heart"></i> 收藏于 {{ collection.created_at|date:"Y年m月d日 H:i" }}
+                        </div>
+                    </div>
+                    <div class="highlight-score-badge">{{ highlight.highlight_score }}</div>
+                </div>
+
+                <!-- Type Badge -->
+                <div class="mb-2">
+                    <span class="badge badge-highlight-type badge-{{ highlight.highlight_type }}">
+                        {% if highlight.highlight_type == 'domination' %}⚡
+                        {% elif highlight.highlight_type == 'comeback' %}↩️
+                        {% elif highlight.highlight_type == 'big_win' %}🎯
+                        {% elif highlight.highlight_type == 'rare_pattern' %}✨
+                        {% endif %}
+                        {{ highlight.get_highlight_type_display }}
+                    </span>
+                    {% if highlight.is_featured %}
+                    <span class="badge bg-warning text-dark ms-1"><i class="bi bi-star-fill"></i> 精选</span>
+                    {% endif %}
+                </div>
+
+                <!-- Title & Description -->
+                <div class="highlight-title mb-1">{{ highlight.title }}</div>
+                {% if highlight.description %}
+                <div class="highlight-desc text-muted small">{{ highlight.description }}</div>
+                {% endif %}
+
+                <!-- Game Scores -->
+                <div class="mt-2 d-flex gap-1 flex-wrap">
+                    {% for gp in highlight.game.players.all %}
+                    <span class="player-score-tag small {% if gp.is_winner %}winner{% elif gp.score < 0 %}loser{% endif %}">
+                        {{ gp.user.get_display_name }}: {{ gp.score|stringformat:"+d" }}
+                    </span>
+                    {% endfor %}
+                </div>
+
+                <!-- Actions -->
+                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-secondary">
+                    <a href="{% url 'games:detail' highlight.game.pk %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-eye"></i> 查看战绩
+                    </a>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-secondary"
+                                onclick="shareHighlight('{{ highlight.title|escapejs }}', '{{ request.scheme }}://{{ request.get_host }}{% url 'games:detail' highlight.game.pk %}')"
+                                title="分享">
+                            <i class="bi bi-share"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger remove-collect-btn" data-id="{{ highlight.pk }}"
+                                onclick="removeFromCollection({{ highlight.pk }}, this)">
+                            <i class="bi bi-heart-fill"></i>
+                            <span>取消收藏</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endwith %}
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-heart fs-1"></i>
+                <p class="mt-3">还没有收藏任何高光时刻</p>
+                <p class="small">去 <a href="{% url 'leaderboard:highlights' %}" class="text-gold">高光时刻集锦</a> 发现精彩，收藏你喜欢的瞬间吧！</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% if base_query %}&{{ base_query }}{% endif %}">
+                    <i class="bi bi-chevron-double-left"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if base_query %}&{{ base_query }}{% endif %}">
+                    <i class="bi bi-chevron-left"></i>
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+            </li>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <li class="page-item active">
+                    <span class="page-link">{{ num }}</span>
+                </li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ num }}{% if base_query %}&{{ base_query }}{% endif %}">{{ num }}</a>
+                </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if base_query %}&{{ base_query }}{% endif %}">
+                    <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if base_query %}&{{ base_query }}{% endif %}">
+                    <i class="bi bi-chevron-double-right"></i>
+                </a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+                <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function removeFromCollection(id, btn) {
+    const resp = await fetch(`/games/highlights/${id}/collect/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '',
+        }
+    });
+    const data = await resp.json();
+    if (!data.collected) {
+        const card = btn.closest('.highlight-item');
+        card.style.transition = 'opacity 0.3s, transform 0.3s';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            card.remove();
+            updateTotalCount();
+            checkEmptyState();
+        }, 300);
+        showToast('已取消收藏', 'success');
+    }
+}
+
+function updateTotalCount() {
+    const countEl = document.querySelector('.page-header p');
+    if (countEl) {
+        const currentText = countEl.textContent;
+        const match = currentText.match(/(\d+)/);
+        if (match) {
+            const newCount = parseInt(match[1]) - 1;
+            countEl.textContent = `共收藏 ${newCount} 个高光时刻`;
+        }
+    }
+}
+
+function checkEmptyState() {
+    const items = document.querySelectorAll('.highlight-item');
+    if (items.length === 0) {
+        location.reload();
+    }
+}
+
+async function shareHighlight(title, url) {
+    if (navigator.share) {
+        try {
+            await navigator.share({ title: `麻将高光时刻：${title}`, url });
+            return;
+        } catch (_) {}
+    }
+    try {
+        await navigator.clipboard.writeText(url);
+        showToast('链接已复制到剪贴板！', 'success');
+    } catch (_) {
+        prompt('复制以下链接分享：', url);
+    }
+}
+</script>
+{% endblock %}
