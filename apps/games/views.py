@@ -553,3 +553,279 @@ def add_snapshot(request, game_pk):
         return JsonResponse({'status': 'ok'})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
+
+def pattern_stats(request):
+    """牌型命中统计查询接口
+
+    支持按时间范围、牌型分类、番数区间和玩家维度筛选，
+    返回命中次数、命中人数、最近出现时间与最高得分关联。
+
+    Query Parameters:
+        - date_from: 开始日期 (YYYY-MM-DD)
+        - date_to: 结束日期 (YYYY-MM-DD)
+        - category: 牌型分类 (special/color/honor/basic/combo/custom)
+        - min_fan: 最小番数
+        - max_fan: 最大番数
+        - player_id: 玩家ID（限定统计范围）
+        - group_by: 分组维度 (pattern/category/player)，默认 pattern
+        - sort_by: 排序字段 (hit_count/player_count/fan_count/last_occurrence/highest_score)
+        - order: 排序方向 (asc/desc)，默认 desc
+        - limit: 返回条数限制，默认 50
+    """
+    from django.db.models import Count, Max, Min, Sum, Q
+    from django.utils import timezone
+    from datetime import datetime, timedelta
+
+    date_from_str = request.GET.get('date_from', '')
+    date_to_str = request.GET.get('date_to', '')
+    category = request.GET.get('category', '')
+    min_fan_str = request.GET.get('min_fan', '')
+    max_fan_str = request.GET.get('max_fan', '')
+    player_id_str = request.GET.get('player_id', '')
+    group_by = request.GET.get('group_by', 'pattern')
+    sort_by = request.GET.get('sort_by', 'hit_count')
+    order = request.GET.get('order', 'desc')
+    limit_str = request.GET.get('limit', '50')
+
+    try:
+        limit = max(1, min(int(limit_str), 200))
+    except (ValueError, TypeError):
+        limit = 50
+
+    qs = GamePlayerPattern.objects.select_related(
+        'tile_pattern', 'game_player', 'game_player__game', 'game_player__user'
+    ).filter(
+        game_player__game__status='completed'
+    )
+
+    if date_from_str:
+        try:
+            date_from = timezone.make_aware(datetime.strptime(date_from_str, '%Y-%m-%d'))
+            qs = qs.filter(game_player__game__game_time__gte=date_from)
+        except ValueError:
+            pass
+
+    if date_to_str:
+        try:
+            date_to = timezone.make_aware(
+                datetime.strptime(date_to_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            )
+            qs = qs.filter(game_player__game__game_time__lte=date_to)
+        except ValueError:
+            pass
+
+    if category:
+        qs = qs.filter(tile_pattern__category=category)
+
+    if min_fan_str:
+        try:
+            min_fan = int(min_fan_str)
+            qs = qs.filter(tile_pattern__fan_count__gte=min_fan)
+        except (ValueError, TypeError):
+            pass
+
+    if max_fan_str:
+        try:
+            max_fan = int(max_fan_str)
+            qs = qs.filter(tile_pattern__fan_count__lte=max_fan)
+        except (ValueError, TypeError):
+            pass
+
+    if player_id_str:
+        try:
+            player_id = int(player_id_str)
+            qs = qs.filter(game_player__user_id=player_id)
+        except (ValueError, TypeError):
+            pass
+
+    if group_by == 'pattern':
+        stats = _get_pattern_grouped_stats(qs, sort_by, order, limit)
+    elif group_by == 'category':
+        stats = _get_category_grouped_stats(qs, sort_by, order, limit)
+    elif group_by == 'player':
+        stats = _get_player_grouped_stats(qs, sort_by, order, limit)
+    else:
+        return JsonResponse({'error': 'Invalid group_by value'}, status=400)
+
+    return JsonResponse({
+        'group_by': group_by,
+        'stats': stats,
+        'total': len(stats),
+        'filters': {
+            'date_from': date_from_str or None,
+            'date_to': date_to_str or None,
+            'category': category or None,
+            'min_fan': int(min_fan_str) if min_fan_str else None,
+            'max_fan': int(max_fan_str) if max_fan_str else None,
+            'player_id': int(player_id_str) if player_id_str else None,
+        },
+    })
+
+
+def _get_pattern_grouped_stats(qs, sort_by, order, limit):
+    """按牌型分组统计"""
+    from django.db.models import Count, Max, Min, Sum
+
+    agg = qs.values(
+        'tile_pattern_id',
+        'tile_pattern__name',
+        'tile_pattern__category',
+        'tile_pattern__fan_count',
+        'tile_pattern__rarity_score',
+    ).annotate(
+        hit_count=Count('id'),
+        player_count=Count('game_player__user_id', distinct=True),
+        last_occurrence=Max('game_player__game__game_time'),
+        highest_score=Max('game_player__score'),
+    )
+
+    sort_map = {
+        'hit_count': 'hit_count',
+        'player_count': 'player_count',
+        'fan_count': 'tile_pattern__fan_count',
+        'last_occurrence': 'last_occurrence',
+        'highest_score': 'highest_score',
+    }
+    sort_field = sort_map.get(sort_by, 'hit_count')
+    order_expr = sort_field if order == 'asc' else f'-{sort_field}'
+    agg = agg.order_by(order_expr, '-hit_count')
+
+    pattern_ids = [item['tile_pattern_id'] for item in agg[:limit]]
+    highest_score_map = {}
+    if pattern_ids:
+        for pid in pattern_ids:
+            top_pattern = qs.filter(
+                tile_pattern_id=pid
+            ).select_related('game_player__user').order_by(
+                '-game_player__score', '-game_player__game__game_time'
+            ).first()
+            if top_pattern:
+                highest_score_map[pid] = {
+                    'player_id': top_pattern.game_player.user_id,
+                    'player_name': top_pattern.game_player.user.get_display_name(),
+                    'game_id': top_pattern.game_player.game_id,
+                    'score': top_pattern.game_player.score,
+                }
+
+    result = []
+    for item in agg[:limit]:
+        pid = item['tile_pattern_id']
+        highest_info = highest_score_map.get(pid, {})
+        result.append({
+            'pattern_id': item['tile_pattern_id'],
+            'pattern_name': item['tile_pattern__name'],
+            'category': item['tile_pattern__category'],
+            'category_name': dict(TilePattern.CATEGORY_CHOICES).get(item['tile_pattern__category'], ''),
+            'fan_count': item['tile_pattern__fan_count'],
+            'rarity_score': item['tile_pattern__rarity_score'],
+            'hit_count': item['hit_count'],
+            'player_count': item['player_count'],
+            'last_occurrence': item['last_occurrence'].isoformat() if item['last_occurrence'] else None,
+            'highest_score': item['highest_score'] or 0,
+            'highest_score_player': highest_info.get('player_name', ''),
+            'highest_score_player_id': highest_info.get('player_id'),
+            'highest_score_game_id': highest_info.get('game_id'),
+        })
+    return result
+
+
+def _get_category_grouped_stats(qs, sort_by, order, limit):
+    """按牌型分类分组统计"""
+    from django.db.models import Count, Max, Min, Sum
+
+    agg = qs.values(
+        'tile_pattern__category',
+    ).annotate(
+        hit_count=Count('id'),
+        player_count=Count('game_player__user_id', distinct=True),
+        pattern_count=Count('tile_pattern_id', distinct=True),
+        last_occurrence=Max('game_player__game__game_time'),
+        highest_score=Max('game_player__score'),
+        total_fan=Sum('tile_pattern__fan_count'),
+    )
+
+    sort_map = {
+        'hit_count': 'hit_count',
+        'player_count': 'player_count',
+        'pattern_count': 'pattern_count',
+        'last_occurrence': 'last_occurrence',
+        'highest_score': 'highest_score',
+        'total_fan': 'total_fan',
+    }
+    sort_field = sort_map.get(sort_by, 'hit_count')
+    order_expr = sort_field if order == 'asc' else f'-{sort_field}'
+    agg = agg.order_by(order_expr)
+
+    result = []
+    for item in agg:
+        cat = item['tile_pattern__category']
+        result.append({
+            'category': cat,
+            'category_name': dict(TilePattern.CATEGORY_CHOICES).get(cat, ''),
+            'hit_count': item['hit_count'],
+            'player_count': item['player_count'],
+            'pattern_count': item['pattern_count'],
+            'last_occurrence': item['last_occurrence'].isoformat() if item['last_occurrence'] else None,
+            'highest_score': item['highest_score'] or 0,
+            'total_fan': item['total_fan'] or 0,
+        })
+    return result
+
+
+def _get_player_grouped_stats(qs, sort_by, order, limit):
+    """按玩家分组统计"""
+    from django.db.models import Count, Max, Min, Sum
+
+    agg = qs.values(
+        'game_player__user_id',
+        'game_player__user__username',
+        'game_player__user__nickname',
+    ).annotate(
+        hit_count=Count('id'),
+        pattern_count=Count('tile_pattern_id', distinct=True),
+        category_count=Count('tile_pattern__category', distinct=True),
+        last_occurrence=Max('game_player__game__game_time'),
+        highest_score=Max('game_player__score'),
+        total_fan=Sum('tile_pattern__fan_count'),
+    )
+
+    sort_map = {
+        'hit_count': 'hit_count',
+        'pattern_count': 'pattern_count',
+        'last_occurrence': 'last_occurrence',
+        'highest_score': 'highest_score',
+        'total_fan': 'total_fan',
+    }
+    sort_field = sort_map.get(sort_by, 'hit_count')
+    order_expr = sort_field if order == 'asc' else f'-{sort_field}'
+    agg = agg.order_by(order_expr)
+
+    player_ids = [item['game_player__user_id'] for item in agg[:limit]]
+    favorite_map = {}
+    if player_ids:
+        for uid in player_ids:
+            fav = qs.filter(
+                game_player__user_id=uid
+            ).values('tile_pattern__name').annotate(
+                cnt=Count('id')
+            ).order_by('-cnt').first()
+            if fav:
+                favorite_map[uid] = fav['tile_pattern__name']
+
+    result = []
+    for item in agg[:limit]:
+        uid = item['game_player__user_id']
+        display_name = item['game_player__user__nickname'] or item['game_player__user__username']
+        result.append({
+            'player_id': uid,
+            'player_name': display_name,
+            'hit_count': item['hit_count'],
+            'pattern_count': item['pattern_count'],
+            'category_count': item['category_count'],
+            'last_occurrence': item['last_occurrence'].isoformat() if item['last_occurrence'] else None,
+            'highest_score': item['highest_score'] or 0,
+            'total_fan': item['total_fan'] or 0,
+            'favorite_pattern': favorite_map.get(uid, ''),
+        })
+    return result

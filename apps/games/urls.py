@@ -17,4 +17,5 @@ urlpatterns = [
     path('import/template/', views.download_template, name='download_template'),
     path('export/', views.export_games, name='export'),
     path('highlights/<int:pk>/collect/', views.collect_highlight, name='collect_highlight'),
+    path('api/pattern-stats/', views.pattern_stats, name='pattern_stats'),
 ]
