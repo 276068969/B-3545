@@ -1027,6 +1027,117 @@ html {
     scroll-behavior: smooth;
 }
 
+/* ---- Room Invite Code Panel ---- */
+.room-invite-panel {
+    background: linear-gradient(135deg, rgba(201,162,39,0.12) 0%, rgba(201,162,39,0.04) 100%);
+    border: 1px solid rgba(201,162,39,0.35);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.room-invite-panel::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -10%;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(201,162,39,0.15) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.room-invite-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.room-invite-code {
+    font-size: 3rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 8px;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 0 20px rgba(201,162,39,0.3);
+    user-select: all;
+    line-height: 1;
+    margin: 4px 0 12px;
+}
+
+.room-invite-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.btn-copy-code {
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    color: #1a1a1a;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 20px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-copy-code:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(201,162,39,0.5);
+    color: #1a1a1a;
+}
+
+.btn-copy-code:active {
+    transform: translateY(0);
+}
+
+.room-invite-tip {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.room-invite-tip i {
+    color: var(--gold);
+}
+
+@media (max-width: 576px) {
+    .room-invite-code {
+        font-size: 2.2rem;
+        letter-spacing: 5px;
+    }
+
+    .room-invite-panel {
+        padding: 16px 18px;
+    }
+
+    .room-invite-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-copy-code {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .room-invite-tip {
+        justify-content: center;
+        text-align: center;
+    }
+}
+
 /* ---- Toast Notification ---- */
 .toast-notification {
     position: fixed;

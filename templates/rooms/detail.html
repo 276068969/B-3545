@@ -74,6 +74,25 @@
         </div>
     </div>
 
+    <!-- Invite Code Panel -->
+    <div class="room-invite-panel">
+        <div class="room-invite-label">
+            <i class="bi bi-qr-code"></i>
+            房间邀请码
+        </div>
+        <div class="room-invite-code" id="roomCodeDisplay">{{ room.code }}</div>
+        <div class="room-invite-actions">
+            <button class="btn-copy-code" onclick="copyRoomCode()" id="copyCodeBtn">
+                <i class="bi bi-clipboard"></i>
+                复制房间码
+            </button>
+            <span class="room-invite-tip">
+                <i class="bi bi-lightbulb"></i>
+                将房间码分享给好友，在「游戏房间」页输入即可加入
+            </span>
+        </div>
+    </div>
+
     <!-- Scoreboard Section -->
     {% if scoreboard.has_active_game or is_host %}
     <div class="card-dark mb-4">
@@ -328,6 +347,7 @@ const ROOM_ID = {{ room.pk }};
 const IS_HOST = {{ is_host|lower }};
 const CURRENT_ROUND = {{ scoreboard.current_round }};
 const USER_IS_READY = {{ user_is_ready|lower }};
+const ROOM_CODE = "{{ room.code }}";
 
 const roomMembers = [
     {% for member in members %}
@@ -539,6 +559,49 @@ function endScoreboard() {
         })
         .catch(e => showAlert('网络错误，请重试'));
     });
+}
+
+function copyRoomCode() {
+    const code = ROOM_CODE;
+    const btn = document.getElementById('copyCodeBtn');
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+            showCopySuccess(btn);
+        }).catch(() => {
+            fallbackCopy(code, btn);
+        });
+    } else {
+        fallbackCopy(code, btn);
+    }
+}
+
+function fallbackCopy(text, btn) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        showCopySuccess(btn);
+    } catch (e) {
+        showAlert('复制失败，请手动复制房间码');
+    }
+    document.body.removeChild(textarea);
+}
+
+function showCopySuccess(btn) {
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2-circle"></i> 已复制';
+    btn.disabled = true;
+    showToast(`房间码 ${ROOM_CODE} 已复制到剪贴板`, 'success');
+    
+    setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+    }, 2000);
 }
 </script>
 {% endblock %}
