@@ -99,6 +99,42 @@
             </div>
         </div>
 
+        <!-- Visualization Charts -->
+        {% if comparison.chart_data_json %}
+        <div class="col-lg-8">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-graph-up text-gold"></i> 累计比分走势</h6>
+                </div>
+                <div class="card-body-dark">
+                    <canvas id="cumulativeChart" height="120"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card-dark h-100">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-pie-chart text-gold"></i> 胜场占比</h6>
+                </div>
+                <div class="card-body-dark d-flex justify-content-center align-items-center">
+                    <canvas id="winRatePieChart" style="max-width:220px;max-height:220px"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-activity text-gold"></i> 近期波动（单场得分差）</h6>
+                </div>
+                <div class="card-body-dark">
+                    <canvas id="scoreDiffChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Recent H2H Games -->
         {% if comparison.game_history %}
         <div class="col-12">
@@ -152,4 +188,197 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% if comparison and comparison.chart_data_json %}
+const chartData = {{ comparison.chart_data_json|safe }};
+const p1Name = "{{ comparison.p1.get_display_name }}";
+const p2Name = "{{ comparison.p2.get_display_name }}";
+const P1_COLOR = '#c9a227';
+const P2_COLOR = '#3498db';
+const DRAW_COLOR = '#6c757d';
+
+const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            labels: { color: '#b8cfe4', font: { size: 12 } }
+        }
+    },
+    scales: {
+        x: {
+            ticks: { color: '#7a9db5', font: { size: 11 } },
+            grid: { color: 'rgba(255,255,255,.06)' }
+        },
+        y: {
+            ticks: { color: '#7a9db5', font: { size: 11 } },
+            grid: { color: 'rgba(255,255,255,.06)' }
+        }
+    }
+};
+
+(function initCumulativeChart() {
+    const ctx = document.getElementById('cumulativeChart');
+    if (!ctx || !chartData.cumulative_labels.length) return;
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.cumulative_labels,
+            datasets: [
+                {
+                    label: p1Name + ' 累计',
+                    data: chartData.p1_cumulative_data,
+                    borderColor: P1_COLOR,
+                    backgroundColor: 'rgba(201,162,39,0.1)',
+                    pointBackgroundColor: P1_COLOR,
+                    pointRadius: 4,
+                    tension: 0.3,
+                    fill: true,
+                },
+                {
+                    label: p2Name + ' 累计',
+                    data: chartData.p2_cumulative_data,
+                    borderColor: P2_COLOR,
+                    backgroundColor: 'rgba(52,152,219,0.1)',
+                    pointBackgroundColor: P2_COLOR,
+                    pointRadius: 4,
+                    tension: 0.3,
+                    fill: true,
+                }
+            ]
+        },
+        options: {
+            ...chartDefaults,
+            plugins: {
+                ...chartDefaults.plugins,
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    titleColor: '#fff',
+                    bodyColor: '#ddd',
+                    borderColor: 'rgba(201,162,39,0.3)',
+                    borderWidth: 1,
+                }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
+            },
+            scales: {
+                ...chartDefaults.scales,
+                y: {
+                    ...chartDefaults.scales.y,
+                    beginAtZero: false,
+                }
+            }
+        }
+    });
+})();
+
+(function initWinRatePieChart() {
+    const ctx = document.getElementById('winRatePieChart');
+    if (!ctx) return;
+    const [p1Wins, p2Wins, draws] = chartData.win_pie_data;
+    const total = p1Wins + p2Wins + draws;
+    if (total === 0) return;
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: [p1Name + ' 胜', p2Name + ' 胜', '平局'],
+            datasets: [{
+                data: [p1Wins, p2Wins, draws],
+                backgroundColor: [P1_COLOR, P2_COLOR, DRAW_COLOR],
+                borderColor: '#1e3448',
+                borderWidth: 3,
+                hoverOffset: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#b8cfe4',
+                        font: { size: 11 },
+                        padding: 12,
+                        usePointStyle: true,
+                        pointStyle: 'circle',
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    titleColor: '#fff',
+                    bodyColor: '#ddd',
+                    borderColor: 'rgba(201,162,39,0.3)',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) {
+                            const val = context.parsed;
+                            const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+                            return ` ${context.label}: ${val} 场 (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+
+(function initScoreDiffChart() {
+    const ctx = document.getElementById('scoreDiffChart');
+    if (!ctx || !chartData.score_labels.length) return;
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartData.score_labels,
+            datasets: [{
+                label: p1Name + ' 得分',
+                data: chartData.p1_score_data,
+                backgroundColor: chartData.p1_score_data.map(v => v >= 0 ? 'rgba(201,162,39,0.7)' : 'rgba(201,162,39,0.35)'),
+                borderColor: P1_COLOR,
+                borderWidth: 1,
+                borderRadius: 4,
+            }, {
+                label: p2Name + ' 得分',
+                data: chartData.p2_score_data,
+                backgroundColor: chartData.p2_score_data.map(v => v >= 0 ? 'rgba(52,152,219,0.7)' : 'rgba(52,152,219,0.35)'),
+                borderColor: P2_COLOR,
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            ...chartDefaults,
+            plugins: {
+                ...chartDefaults.plugins,
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(0,0,0,0.85)',
+                    titleColor: '#fff',
+                    bodyColor: '#ddd',
+                    borderColor: 'rgba(201,162,39,0.3)',
+                    borderWidth: 1,
+                }
+            },
+            scales: {
+                ...chartDefaults.scales,
+                y: {
+                    ...chartDefaults.scales.y,
+                    beginAtZero: false,
+                }
+            }
+        }
+    });
+})();
+{% endif %}
+</script>
 {% endblock %}

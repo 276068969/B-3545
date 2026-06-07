@@ -420,27 +420,72 @@ def get_vs_stats(p1, p2):
     p2_total_score = 0
 
     game_history = []
-    for game in shared_games.order_by('game_time'):
+    cumulative_p1 = 0
+    cumulative_p2 = 0
+    cumulative_data = []
+    single_game_scores = []
+    win_streak_data = []
+    p1_cum_wins = 0
+    p2_cum_wins = 0
+
+    for idx, game in enumerate(shared_games.order_by('game_time'), 1):
         p1_gp = game.players.filter(user=p1).first()
         p2_gp = game.players.filter(user=p2).first()
         if p1_gp and p2_gp:
             if p1_gp.score > p2_gp.score:
                 p1_wins += 1
+                p1_cum_wins += 1
                 result = 'p1'
             elif p2_gp.score > p1_gp.score:
                 p2_wins += 1
+                p2_cum_wins += 1
                 result = 'p2'
             else:
                 draws += 1
                 result = 'draw'
             p1_total_score += p1_gp.score
             p2_total_score += p2_gp.score
+            cumulative_p1 += p1_gp.score
+            cumulative_p2 += p2_gp.score
             game_history.append({
                 'game': game,
                 'p1_score': p1_gp.score,
                 'p2_score': p2_gp.score,
                 'result': result,
             })
+            cumulative_data.append({
+                'game_num': idx,
+                'label': game.game_time.strftime('%m/%d'),
+                'p1_cumulative': cumulative_p1,
+                'p2_cumulative': cumulative_p2,
+            })
+            single_game_scores.append({
+                'game_num': idx,
+                'label': game.game_time.strftime('%m/%d'),
+                'p1_score': p1_gp.score,
+                'p2_score': p2_gp.score,
+                'score_diff': p1_gp.score - p2_gp.score,
+            })
+            win_streak_data.append({
+                'game_num': idx,
+                'label': game.game_time.strftime('%m/%d'),
+                'p1_win_rate': (p1_cum_wins / idx * 100) if idx > 0 else 0,
+                'p2_win_rate': (p2_cum_wins / idx * 100) if idx > 0 else 0,
+            })
+
+    chart_data = {
+        'cumulative_labels': [d['label'] for d in cumulative_data],
+        'p1_cumulative_data': [d['p1_cumulative'] for d in cumulative_data],
+        'p2_cumulative_data': [d['p2_cumulative'] for d in cumulative_data],
+        'score_labels': [d['label'] for d in single_game_scores],
+        'p1_score_data': [d['p1_score'] for d in single_game_scores],
+        'p2_score_data': [d['p2_score'] for d in single_game_scores],
+        'score_diff_data': [d['score_diff'] for d in single_game_scores],
+        'win_rate_labels': [d['label'] for d in win_streak_data],
+        'p1_win_rate_data': [d['p1_win_rate'] for d in win_streak_data],
+        'p2_win_rate_data': [d['p2_win_rate'] for d in win_streak_data],
+        'win_pie_data': [p1_wins, p2_wins, draws],
+    }
 
     return {
         'p1': p1,
@@ -454,4 +499,5 @@ def get_vs_stats(p1, p2):
         'p1_total_score': p1_total_score,
         'p2_total_score': p2_total_score,
         'game_history': game_history[-10:],
+        'chart_data_json': json.dumps(chart_data),
     }
