@@ -231,7 +231,7 @@
             <div class="card-dark">
                 <div class="card-header-dark">
                     <h6 class="mb-0"><i class="bi bi-stars text-gold"></i> 高光时刻</h6>
-                    <a href="{% url 'leaderboard:highlights' %}?winner={{ profile_user.pk }}" class="btn btn-sm btn-outline-gold">查看全部</a>
+                    <a href="{% url 'leaderboard:highlights' %}?player={{ profile_user.pk }}" class="btn btn-sm btn-outline-gold">查看全部</a>
                 </div>
                 <div class="card-body-dark">
                     {% if is_own_profile and collected_highlights %}

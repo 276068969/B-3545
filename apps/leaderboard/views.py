@@ -343,6 +343,8 @@ def highlights_board(request):
     """高光时刻集锦"""
     sort_by = request.GET.get('sort', 'score')
     highlight_type = request.GET.get('type', '')
+    winner_filter = request.GET.get('winner', '')
+    player_filter = request.GET.get('player', '')
 
     highlights_qs = Highlight.objects.select_related('winner', 'game').prefetch_related(
         'game__players__user', 'collected_by'
@@ -350,6 +352,12 @@ def highlights_board(request):
 
     if highlight_type:
         highlights_qs = highlights_qs.filter(highlight_type=highlight_type)
+
+    if winner_filter:
+        highlights_qs = highlights_qs.filter(winner_id=winner_filter)
+
+    if player_filter:
+        highlights_qs = highlights_qs.filter(game__players__user_id=player_filter).distinct()
 
     if sort_by == 'time':
         highlights_qs = highlights_qs.order_by('-is_pinned', '-is_featured', '-created_at')

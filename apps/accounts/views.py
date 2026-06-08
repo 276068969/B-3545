@@ -77,12 +77,12 @@ def profile_view(request, username=None):
         ).order_by('-created_at')[:4]
 
     user_highlights = Highlight.objects.filter(
-        winner=profile_user
+        game__players__user=profile_user
     ).select_related(
-        'game'
+        'game', 'winner'
     ).prefetch_related(
         'game__players__user'
-    ).order_by('-is_pinned', '-is_featured', '-highlight_score', '-created_at')[:4]
+    ).order_by('-is_pinned', '-is_featured', '-highlight_score', '-created_at').distinct()[:4]
 
     # Last 10 games score trend
     score_trend = list(
