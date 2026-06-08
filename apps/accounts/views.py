@@ -53,7 +53,7 @@ def profile_view(request, username=None):
             return redirect('accounts:login')
         profile_user = request.user
 
-    from apps.games.models import GamePlayer, Game
+    from apps.games.models import GamePlayer, Game, Highlight, HighlightCollection
     from django.db.models import Count, Sum, Avg, Q
     import json
 
@@ -65,9 +65,24 @@ def profile_view(request, username=None):
     stats = profile_user.stats
 
     collected_count = 0
+    collected_highlights = []
     if request.user == profile_user:
-        from apps.games.models import HighlightCollection
         collected_count = HighlightCollection.objects.filter(user=profile_user).count()
+        collected_highlights = HighlightCollection.objects.filter(
+            user=profile_user
+        ).select_related(
+            'highlight', 'highlight__game', 'highlight__winner'
+        ).prefetch_related(
+            'highlight__game__players__user'
+        ).order_by('-created_at')[:4]
+
+    user_highlights = Highlight.objects.filter(
+        winner=profile_user
+    ).select_related(
+        'game'
+    ).prefetch_related(
+        'game__players__user'
+    ).order_by('-is_pinned', '-is_featured', '-highlight_score', '-created_at')[:4]
 
     # Last 10 games score trend
     score_trend = list(
@@ -85,6 +100,8 @@ def profile_view(request, username=None):
         'score_trend': json.dumps(score_trend),
         'is_own_profile': request.user == profile_user,
         'collected_count': collected_count,
+        'collected_highlights': collected_highlights,
+        'user_highlights': user_highlights,
     }
     return render(request, 'accounts/profile.html', context)
 

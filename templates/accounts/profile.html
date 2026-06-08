@@ -223,6 +223,127 @@
             </div>
         </div>
     </div>
+
+    <!-- Highlight Showcase -->
+    {% if collected_highlights or user_highlights %}
+    <div class="row g-4 mt-4">
+        <div class="col-12">
+            <div class="card-dark">
+                <div class="card-header-dark">
+                    <h6 class="mb-0"><i class="bi bi-stars text-gold"></i> 高光时刻</h6>
+                    <a href="{% url 'leaderboard:highlights' %}?winner={{ profile_user.pk }}" class="btn btn-sm btn-outline-gold">查看全部</a>
+                </div>
+                <div class="card-body-dark">
+                    {% if is_own_profile and collected_highlights %}
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <i class="bi bi-heart-fill text-danger"></i>
+                            <span class="text-light fw-medium">我的收藏</span>
+                            <span class="text-muted small">(最近收藏)</span>
+                        </div>
+                        <div class="row g-3">
+                            {% for collection in collected_highlights %}
+                            {% with highlight=collection.highlight %}
+                            <div class="col-md-6 col-lg-3">
+                                <div class="highlight-card-full h-100 {% if highlight.is_pinned %}highlight-pinned-card{% endif %} {% if highlight.is_featured %}highlight-featured-card{% endif %}">
+                                    {% if highlight.is_pinned %}
+                                    <div class="pinned-ribbon"><i class="bi bi-pin-angle-fill"></i> 置顶</div>
+                                    {% endif %}
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <img src="{{ highlight.winner.get_avatar_url }}" class="mini-avatar">
+                                        <div class="flex-grow-1">
+                                            <a href="{% url 'accounts:user_profile' highlight.winner.username %}" class="player-name small">
+                                                {{ highlight.winner.get_display_name }}
+                                            </a>
+                                        </div>
+                                        <div class="highlight-score-badge" style="font-size:0.7rem;padding:2px 8px;">{{ highlight.highlight_score }}</div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <span class="badge badge-highlight-type badge-{{ highlight.highlight_type }}" style="font-size:0.65rem;">
+                                            {% if highlight.highlight_type == 'domination' %}⚡
+                                            {% elif highlight.highlight_type == 'comeback' %}↩️
+                                            {% elif highlight.highlight_type == 'big_win' %}🎯
+                                            {% elif highlight.highlight_type == 'rare_pattern' %}✨
+                                            {% endif %}
+                                            {{ highlight.get_highlight_type_display }}
+                                        </span>
+                                        {% if highlight.is_featured %}
+                                        <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;"><i class="bi bi-star-fill"></i> 精选</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="highlight-title small mb-1" style="font-size:0.85rem;">{{ highlight.get_display_title }}</div>
+                                    <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-secondary">
+                                        <a href="{% url 'games:detail' highlight.game.pk %}" class="text-gold text-decoration-none small">
+                                            <i class="bi bi-box-arrow-up-right"></i> 查看
+                                        </a>
+                                        <span class="text-muted small">
+                                            <i class="bi bi-calendar"></i> {{ collection.created_at|date:"m/d" }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endwith %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if user_highlights %}
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <i class="bi bi-trophy text-gold"></i>
+                            <span class="text-light fw-medium">精彩对局</span>
+                            <span class="text-muted small">(本人参与)</span>
+                        </div>
+                        <div class="row g-3">
+                            {% for highlight in user_highlights %}
+                            <div class="col-md-6 col-lg-3">
+                                <div class="highlight-card-full h-100 {% if highlight.is_pinned %}highlight-pinned-card{% endif %} {% if highlight.is_featured %}highlight-featured-card{% endif %}">
+                                    {% if highlight.is_pinned %}
+                                    <div class="pinned-ribbon"><i class="bi bi-pin-angle-fill"></i> 置顶</div>
+                                    {% endif %}
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <img src="{{ highlight.winner.get_avatar_url }}" class="mini-avatar">
+                                        <div class="flex-grow-1">
+                                            <a href="{% url 'accounts:user_profile' highlight.winner.username %}" class="player-name small">
+                                                {{ highlight.winner.get_display_name }}
+                                            </a>
+                                        </div>
+                                        <div class="highlight-score-badge" style="font-size:0.7rem;padding:2px 8px;">{{ highlight.highlight_score }}</div>
+                                    </div>
+                                    <div class="mb-2">
+                                        <span class="badge badge-highlight-type badge-{{ highlight.highlight_type }}" style="font-size:0.65rem;">
+                                            {% if highlight.highlight_type == 'domination' %}⚡
+                                            {% elif highlight.highlight_type == 'comeback' %}↩️
+                                            {% elif highlight.highlight_type == 'big_win' %}🎯
+                                            {% elif highlight.highlight_type == 'rare_pattern' %}✨
+                                            {% endif %}
+                                            {{ highlight.get_highlight_type_display }}
+                                        </span>
+                                        {% if highlight.is_featured %}
+                                        <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;"><i class="bi bi-star-fill"></i> 精选</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="highlight-title small mb-1" style="font-size:0.85rem;">{{ highlight.get_display_title }}</div>
+                                    <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top border-secondary">
+                                        <a href="{% url 'games:detail' highlight.game.pk %}" class="text-gold text-decoration-none small">
+                                            <i class="bi bi-box-arrow-up-right"></i> 查看
+                                        </a>
+                                        <span class="text-muted small">
+                                            <i class="bi bi-calendar"></i> {{ highlight.game.game_time|date:"m/d" }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
