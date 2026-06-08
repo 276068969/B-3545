@@ -1301,3 +1301,124 @@ def tile_pattern_categories(request):
         'total_categories': len(result),
         'total_patterns': sum(c['pattern_count'] for c in result),
     })
+
+
+def playmate_stats(request):
+    """玩家同桌频率统计接口
+
+    计算某位玩家最常一起打牌的对象、共同参战次数、
+    同桌时平均得分和同桌胜率，适用于「个人主页」、
+    「房间」或「玩家对比」场景。
+
+    Query Parameters:
+        - player_id: 玩家ID（必填）
+        - date_from: 开始日期 (YYYY-MM-DD)，可选
+        - date_to: 结束日期 (YYYY-MM-DD)，可选
+        - room_id: 房间ID，可选，限定统计范围
+        - sort_by: 排序字段 (game_count/avg_score/win_rate/total_score/last_played)，默认 game_count
+        - order: 排序方向 (asc/desc)，默认 desc
+        - limit: 返回条数限制，默认 20，最大 100
+    """
+    from .utils import get_playmate_stats
+    from django.utils import timezone
+    from datetime import datetime
+
+    player_id_str = request.GET.get('player_id', '')
+    date_from_str = request.GET.get('date_from', '')
+    date_to_str = request.GET.get('date_to', '')
+    room_id_str = request.GET.get('room_id', '')
+    sort_by = request.GET.get('sort_by', 'game_count')
+    order = request.GET.get('order', 'desc')
+    limit_str = request.GET.get('limit', '20')
+
+    warnings = []
+    errors = []
+
+    if not player_id_str:
+        return JsonResponse({'error': 'player_id 参数必填', 'warnings': []}, status=400)
+
+    try:
+        player_id = int(player_id_str)
+        if player_id < 1:
+            return JsonResponse({'error': 'player_id 不能小于 1', 'warnings': []}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'error': 'player_id 格式有误，应为正整数', 'warnings': []}, status=400)
+
+    try:
+        limit = max(1, min(int(limit_str), 100))
+    except (ValueError, TypeError):
+        limit = 20
+        warnings.append('limit 参数格式有误，已使用默认值 20')
+
+    valid_sort_fields = ['game_count', 'avg_score', 'win_rate', 'total_score', 'last_played']
+    if sort_by not in valid_sort_fields:
+        sort_by = 'game_count'
+        warnings.append(f'sort_by 参数无效，有效值为 {", ".join(valid_sort_fields)}，已使用默认值 game_count')
+
+    if order not in ('asc', 'desc'):
+        order = 'desc'
+        warnings.append('order 参数无效，有效值为 asc/desc，已使用默认值 desc')
+
+    date_from = None
+    if date_from_str:
+        try:
+            date_from = timezone.make_aware(datetime.strptime(date_from_str, '%Y-%m-%d'))
+        except ValueError:
+            warnings.append('date_from 格式有误，应为 YYYY-MM-DD，已忽略')
+
+    date_to = None
+    if date_to_str:
+        try:
+            date_to = timezone.make_aware(
+                datetime.strptime(date_to_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            )
+        except ValueError:
+            warnings.append('date_to 格式有误，应为 YYYY-MM-DD，已忽略')
+
+    room_id = None
+    if room_id_str:
+        try:
+            room_id = int(room_id_str)
+            if room_id < 1:
+                room_id = None
+                warnings.append('room_id 不能小于 1，已忽略')
+        except (ValueError, TypeError):
+            warnings.append('room_id 格式有误，应为正整数，已忽略')
+
+    stats = get_playmate_stats(
+        player_id=player_id,
+        date_from=date_from,
+        date_to=date_to,
+        room_id=room_id,
+        sort_by=sort_by,
+        order=order,
+        limit=limit,
+    )
+
+    from apps.accounts.models import User
+    player_name = ''
+    player_username = ''
+    try:
+        user = User.objects.get(pk=player_id)
+        player_name = user.get_display_name()
+        player_username = user.username
+    except User.DoesNotExist:
+        errors.append('玩家不存在')
+
+    return JsonResponse({
+        'player_id': player_id,
+        'player_name': player_name,
+        'player_username': player_username,
+        'stats': stats,
+        'total': len(stats),
+        'filters': {
+            'date_from': date_from_str or None,
+            'date_to': date_to_str or None,
+            'room_id': room_id,
+            'sort_by': sort_by,
+            'order': order,
+            'limit': limit,
+        },
+        'warnings': warnings if warnings else [],
+        'errors': errors if errors else [],
+    })

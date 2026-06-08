@@ -564,3 +564,123 @@ def apply_game_filters(queryset, form):
         )
 
     return queryset
+
+
+def get_playmate_stats(player_id, date_from=None, date_to=None, room_id=None,
+                       sort_by='game_count', order='desc', limit=20):
+    """计算玩家的同桌关系统计
+
+    Args:
+        player_id: 目标玩家ID
+        date_from: 开始日期 (datetime)，可选
+        date_to: 结束日期 (datetime)，可选
+        room_id: 房间ID，可选，限定统计范围
+        sort_by: 排序字段 (game_count/avg_score/win_rate/total_score/last_played)，默认 game_count
+        order: 排序方向 (asc/desc)，默认 desc
+        limit: 返回数量限制，默认 20
+
+    Returns:
+        list: 同桌玩家统计列表，每项包含：
+            - teammate_id: 同桌玩家ID
+            - teammate_name: 同桌玩家显示名称
+            - game_count: 共同参战次数
+            - avg_score: 同桌时目标玩家的平均得分
+            - win_rate: 同桌时目标玩家的胜率（百分比）
+            - wins: 同桌时获胜次数
+            - losses: 同桌时失败次数
+            - total_score: 同桌时总得分
+            - last_played: 最后一次同桌时间
+    """
+    from .models import GamePlayer
+    from django.db.models import Count, Avg, Sum, Max, Q
+    from apps.accounts.models import User
+
+    try:
+        player = User.objects.get(pk=player_id)
+    except User.DoesNotExist:
+        return []
+
+    my_games_qs = GamePlayer.objects.filter(
+        user=player,
+        game__status='completed'
+    ).select_related('game')
+
+    if date_from:
+        my_games_qs = my_games_qs.filter(game__game_time__gte=date_from)
+    if date_to:
+        my_games_qs = my_games_qs.filter(game__game_time__lte=date_to)
+    if room_id:
+        my_games_qs = my_games_qs.filter(game__room_id=room_id)
+
+    my_game_ids = list(my_games_qs.values_list('game_id', flat=True))
+
+    if not my_game_ids:
+        return []
+
+    teammate_qs = GamePlayer.objects.filter(
+        game_id__in=my_game_ids
+    ).exclude(
+        user_id=player_id
+    ).select_related('user', 'game')
+
+    my_scores_by_game = {gp.game_id: gp for gp in my_games_qs}
+
+    stats_by_teammate = {}
+    for gp in teammate_qs:
+        uid = gp.user_id
+        if uid not in stats_by_teammate:
+            stats_by_teammate[uid] = {
+                'teammate_id': uid,
+                'teammate_name': gp.user.get_display_name(),
+                'teammate_username': gp.user.username,
+                'game_count': 0,
+                'wins': 0,
+                'losses': 0,
+                'total_score': 0,
+                'last_played': None,
+            }
+
+        my_gp = my_scores_by_game.get(gp.game_id)
+        if my_gp:
+            s = stats_by_teammate[uid]
+            s['game_count'] += 1
+            s['total_score'] += my_gp.score
+            if my_gp.is_winner:
+                s['wins'] += 1
+            else:
+                s['losses'] += 1
+            if s['last_played'] is None or gp.game.game_time > s['last_played']:
+                s['last_played'] = gp.game.game_time
+
+    result = []
+    for s in stats_by_teammate.values():
+        game_count = s['game_count']
+        avg_score = round(s['total_score'] / game_count, 2) if game_count > 0 else 0
+        win_rate = round(s['wins'] / game_count * 100, 2) if game_count > 0 else 0
+
+        result.append({
+            'teammate_id': s['teammate_id'],
+            'teammate_name': s['teammate_name'],
+            'teammate_username': s['teammate_username'],
+            'game_count': game_count,
+            'avg_score': avg_score,
+            'win_rate': win_rate,
+            'wins': s['wins'],
+            'losses': s['losses'],
+            'total_score': s['total_score'],
+            'last_played': s['last_played'].isoformat() if s['last_played'] else None,
+        })
+
+    sort_map = {
+        'game_count': 'game_count',
+        'avg_score': 'avg_score',
+        'win_rate': 'win_rate',
+        'total_score': 'total_score',
+        'last_played': 'last_played',
+    }
+    sort_field = sort_map.get(sort_by, 'game_count')
+
+    reverse = order == 'desc'
+    result.sort(key=lambda x: (x[sort_field] is None, x[sort_field]), reverse=reverse)
+
+    return result[:limit]

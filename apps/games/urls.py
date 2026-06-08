@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/tile-patterns/categories/', views.tile_pattern_categories, name='tile_pattern_categories'),
     path('api/tile-patterns/<int:pk>/', views.tile_pattern_detail, name='tile_pattern_detail'),
     path('api/tile-patterns/', views.tile_pattern_list, name='tile_pattern_list'),
+    path('api/playmate-stats/', views.playmate_stats, name='playmate_stats'),
 ]
