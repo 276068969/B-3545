@@ -38,16 +38,15 @@
                     <h6 class="mb-0"><i class="bi bi-upload text-info"></i> 数据恢复</h6>
                 </div>
                 <div class="card-body-dark">
-                    <p class="text-muted small">从之前下载的 JSON 备份文件恢复战绩数据（仅补充不存在的记录，不覆盖）。</p>
-                    <form method="post" enctype="multipart/form-data">
+                    <p class="text-muted small">从之前下载的 JSON 备份文件恢复战绩数据。系统会自动分析并分类可恢复与冲突记录。</p>
+                    <form method="post" enctype="multipart/form-data" action="/games/restore/">
                         {% csrf_token %}
                         <div class="mb-3">
                             <label class="form-label text-muted small">选择备份文件（.json）</label>
                             <input type="file" name="backup_file" accept=".json" class="form-control form-control-sm bg-dark text-light border-secondary">
                         </div>
-                        <button type="button" class="btn btn-info w-100"
-                                onclick="confirmRestore()">
-                            <i class="bi bi-arrow-counterclockwise"></i> 开始恢复
+                        <button type="submit" class="btn btn-info w-100">
+                            <i class="bi bi-binoculars"></i> 分析备份文件
                         </button>
                     </form>
                 </div>
@@ -60,7 +59,9 @@
             <h6 class="text-gold mb-2"><i class="bi bi-info-circle"></i> 注意事项</h6>
             <ul class="text-muted small mb-0">
                 <li>备份文件包含游戏时间、地点、类型、参与玩家及得分信息</li>
-                <li>恢复时若备份中的用户名在系统中不存在，该条记录将被跳过</li>
+                <li>上传备份文件后，系统会自动分析并进入「冲突中心」预览页面</li>
+                <li>冲突中心将明确区分：可恢复记录、重复战绩、缺失用户、格式冲突</li>
+                <li>确认恢复后，仅可恢复记录会被写入，其他类型记录将被跳过</li>
                 <li>恢复操作不会删除现有数据，只会追加不重复的战绩</li>
                 <li>恢复完成后系统将自动重新计算所有玩家统计数据</li>
             </ul>
@@ -71,12 +72,6 @@
 
 {% block extra_js %}
 <script>
-function confirmRestore() {
-    const f = document.querySelector('input[name="backup_file"]');
-    if (!f || !f.files.length) { showAlert('请先选择备份文件。'); return; }
-    showConfirm('确认从备份文件恢复数据？<br><small class="text-muted">重复数据会被跳过，不影响现有战绩。</small>', () => {
-        f.closest('form').submit();
-    });
-}
+// 预留：可在此添加额外交互逻辑
 </script>
 {% endblock %}

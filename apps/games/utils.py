@@ -684,3 +684,350 @@ def get_playmate_stats(player_id, date_from=None, date_to=None, room_id=None,
     result.sort(key=lambda x: (x[sort_field] is None, x[sort_field]), reverse=reverse)
 
     return result[:limit]
+
+
+RESTORE_TYPE_RECOVERABLE = 'recoverable'
+RESTORE_TYPE_DUPLICATE = 'duplicate'
+RESTORE_TYPE_MISSING_USER = 'missing_user'
+RESTORE_TYPE_FORMAT_ERROR = 'format_error'
+
+RESTORE_TYPE_LABELS = {
+    RESTORE_TYPE_RECOVERABLE: '可恢复记录',
+    RESTORE_TYPE_DUPLICATE: '重复战绩',
+    RESTORE_TYPE_MISSING_USER: '缺失用户',
+    RESTORE_TYPE_FORMAT_ERROR: '格式冲突',
+}
+
+RESTORE_TYPE_COLORS = {
+    RESTORE_TYPE_RECOVERABLE: 'success',
+    RESTORE_TYPE_DUPLICATE: 'info',
+    RESTORE_TYPE_MISSING_USER: 'warning',
+    RESTORE_TYPE_FORMAT_ERROR: 'danger',
+}
+
+
+class RestoreItem:
+    def __init__(self, index, game_data=None, message='', details=None):
+        self.index = index
+        self.game_data = game_data or {}
+        self.message = message
+        self.details = details or {}
+
+    def to_dict(self):
+        return {
+            'index': self.index,
+            'game_data': self.game_data,
+            'message': self.message,
+            'details': self.details,
+        }
+
+
+class RestoreResult:
+    def __init__(self):
+        self.recoverable = []
+        self.duplicates = []
+        self.missing_users = []
+        self.format_errors = []
+        self.total_count = 0
+
+    def add_recoverable(self, item):
+        self.recoverable.append(item)
+        self.total_count += 1
+
+    def add_duplicate(self, item):
+        self.duplicates.append(item)
+        self.total_count += 1
+
+    def add_missing_user(self, item):
+        self.missing_users.append(item)
+        self.total_count += 1
+
+    def add_format_error(self, item):
+        self.format_errors.append(item)
+        self.total_count += 1
+
+    @property
+    def recoverable_count(self):
+        return len(self.recoverable)
+
+    @property
+    def duplicate_count(self):
+        return len(self.duplicates)
+
+    @property
+    def missing_user_count(self):
+        return len(self.missing_users)
+
+    @property
+    def format_error_count(self):
+        return len(self.format_errors)
+
+    def get_category_summary(self):
+        categories = []
+        for type_key, label in RESTORE_TYPE_LABELS.items():
+            if type_key == RESTORE_TYPE_RECOVERABLE:
+                items = self.recoverable
+            elif type_key == RESTORE_TYPE_DUPLICATE:
+                items = self.duplicates
+            elif type_key == RESTORE_TYPE_MISSING_USER:
+                items = self.missing_users
+            else:
+                items = self.format_errors
+
+            if items:
+                categories.append({
+                    'type': type_key,
+                    'label': label,
+                    'count': len(items),
+                    'color': RESTORE_TYPE_COLORS.get(type_key, 'secondary'),
+                    'samples': [item.to_dict() for item in items[:5]],
+                })
+        return categories
+
+    def get_summary_dict(self):
+        return {
+            'total': self.total_count,
+            'recoverable_count': self.recoverable_count,
+            'duplicate_count': self.duplicate_count,
+            'missing_user_count': self.missing_user_count,
+            'format_error_count': self.format_error_count,
+            'categories': self.get_category_summary(),
+        }
+
+    def get_all_errors(self):
+        errors = []
+        for item in self.duplicates:
+            errors.append(item.to_dict())
+        for item in self.missing_users:
+            errors.append(item.to_dict())
+        for item in self.format_errors:
+            errors.append(item.to_dict())
+        return errors
+
+
+def _get_game_signature(game_time, players_data):
+    """生成游戏的唯一签名，用于检测重复战绩
+
+    使用 游戏时间 + 排序后的玩家用户名集合 + 排序后的得分集合 作为签名
+    """
+    from datetime import datetime
+    if isinstance(game_time, datetime):
+        time_str = game_time.strftime('%Y-%m-%d %H:%M')
+    else:
+        time_str = str(game_time)
+
+    usernames = sorted(p.get('username', '') for p in players_data)
+    scores = sorted(str(p.get('score', 0)) for p in players_data)
+    return f"{time_str}|{','.join(usernames)}|{','.join(scores)}"
+
+
+def analyze_backup_file(file_obj):
+    """分析备份文件，将记录分类为可恢复、重复、缺失用户和格式冲突
+
+    Args:
+        file_obj: 上传的备份文件对象
+
+    Returns:
+        RestoreResult: 结构化的恢复分析结果
+    """
+    import json
+    from datetime import datetime
+    from django.utils import timezone
+    from apps.accounts.models import User
+    from .models import Game, GamePlayer
+
+    result = RestoreResult()
+
+    try:
+        data = json.loads(file_obj.read().decode('utf-8'))
+        games_data = data.get('games', [])
+        if not isinstance(games_data, list):
+            raise ValueError('games 字段必须是数组')
+    except Exception as e:
+        result.add_format_error(RestoreItem(
+            index=0,
+            message=f'备份文件解析失败：{e}',
+            details={'exception': str(e)},
+        ))
+        return result
+
+    existing_signatures = set()
+    for game in Game.objects.filter(status='completed').prefetch_related('players__user'):
+        players_data = [
+            {'username': gp.user.username, 'score': gp.score}
+            for gp in game.players.all()
+        ]
+        sig = _get_game_signature(game.game_time, players_data)
+        existing_signatures.add(sig)
+
+    for i, gd in enumerate(games_data, 1):
+        try:
+            if not isinstance(gd, dict):
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：数据格式错误，不是对象',
+                    details={'raw_type': type(gd).__name__},
+                ))
+                continue
+
+            game_time_str = gd.get('game_time', '')
+            players_raw = gd.get('players', [])
+
+            if not game_time_str:
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：缺少游戏时间',
+                    details={'game_data': gd},
+                ))
+                continue
+
+            if not players_raw or not isinstance(players_raw, list):
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：玩家数据格式错误',
+                    details={'players_type': type(players_raw).__name__},
+                ))
+                continue
+
+            try:
+                gt = datetime.fromisoformat(game_time_str)
+                if gt.tzinfo is None:
+                    gt = timezone.make_aware(gt)
+            except (ValueError, TypeError):
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：时间格式错误 "{game_time_str}"',
+                    details={'game_time_str': game_time_str},
+                ))
+                continue
+
+            players_data = []
+            missing_usernames = []
+            has_format_error = False
+            total_score = 0
+
+            for pd in players_raw:
+                if not isinstance(pd, dict):
+                    has_format_error = True
+                    continue
+
+                username = pd.get('username', '')
+                try:
+                    score = int(pd.get('score', 0))
+                except (ValueError, TypeError):
+                    has_format_error = True
+                    continue
+
+                if not username:
+                    has_format_error = True
+                    continue
+
+                try:
+                    user = User.objects.get(username=username)
+                    players_data.append({
+                        'user': user,
+                        'username': username,
+                        'score': score,
+                        'is_winner': pd.get('is_winner', score > 0),
+                    })
+                    total_score += score
+                except User.DoesNotExist:
+                    missing_usernames.append(username)
+
+            if has_format_error:
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：玩家数据格式错误',
+                    details={'players_raw': players_raw},
+                ))
+                continue
+
+            if missing_usernames:
+                result.add_missing_user(RestoreItem(
+                    index=i,
+                    game_data={
+                        'game_time': gt.isoformat(),
+                        'location': gd.get('location', ''),
+                        'game_type': gd.get('game_type', ''),
+                        'players': [{'username': p.get('username', ''), 'score': p.get('score', 0)} for p in players_raw],
+                    },
+                    message=f'第{i}条：用户 {", ".join(missing_usernames)} 不存在',
+                    details={'missing_usernames': missing_usernames},
+                ))
+                continue
+
+            if len(players_data) < 2:
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：玩家数量不足（至少2人）',
+                    details={'player_count': len(players_data)},
+                ))
+                continue
+
+            if total_score != 0:
+                result.add_format_error(RestoreItem(
+                    index=i,
+                    message=f'第{i}条：得分总和不为0（当前为{total_score}）',
+                    details={'total_score': total_score},
+                ))
+                continue
+
+            sig_players = [{'username': p['username'], 'score': p['score']} for p in players_data]
+            signature = _get_game_signature(gt, sig_players)
+
+            if signature in existing_signatures:
+                result.add_duplicate(RestoreItem(
+                    index=i,
+                    game_data={
+                        'game_time': gt.isoformat(),
+                        'location': gd.get('location', ''),
+                        'game_type': gd.get('game_type', ''),
+                        'base_score': gd.get('base_score', 1),
+                        'players': [
+                            {'username': p['username'], 'score': p['score']}
+                            for p in players_data
+                        ],
+                    },
+                    message=f'第{i}条：与现有战绩重复',
+                    details={'signature': signature},
+                ))
+                continue
+
+            creator = None
+            creator_username = gd.get('creator', '')
+            if creator_username:
+                creator = User.objects.filter(username=creator_username).first()
+
+            result.add_recoverable(RestoreItem(
+                index=i,
+                game_data={
+                    'game_time': gt.isoformat(),
+                    'location': gd.get('location', ''),
+                    'game_type': gd.get('game_type', 'mahjong_16'),
+                    'base_score': gd.get('base_score', 1),
+                    'notes': gd.get('notes', ''),
+                    'is_supplemental': gd.get('is_supplemental', True),
+                    'creator_username': creator_username,
+                    'creator_exists': creator is not None,
+                    'players': [
+                        {
+                            'username': p['username'],
+                            'display_name': p['user'].get_display_name(),
+                            'score': p['score'],
+                            'is_winner': p['is_winner'],
+                        }
+                        for p in players_data
+                    ],
+                },
+                message=f'第{i}条：可恢复',
+                details={'players_count': len(players_data)},
+            ))
+
+        except Exception as e:
+            result.add_format_error(RestoreItem(
+                index=i,
+                message=f'第{i}条：解析错误 - {e}',
+                details={'exception': str(e)},
+            ))
+
+    return result

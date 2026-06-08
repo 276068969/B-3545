@@ -1,0 +1,294 @@
+{% extends 'base.html' %}
+{% block title %}备份恢复冲突中心{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="page-header mb-4">
+        <h3 class="mb-0"><i class="bi bi-shield-check text-gold"></i> 备份恢复冲突中心</h3>
+        <p class="text-muted mt-1 mb-0 small">分析备份文件中的数据，明确区分可恢复与各类冲突记录</p>
+    </div>
+
+    <!-- Stats row -->
+    <div class="d-flex gap-3 mb-4 flex-wrap">
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-success fs-4 fw-bold">{{ restore_result.recoverable_count }}</div>
+            <div class="text-muted small">可恢复记录</div>
+        </div>
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-info fs-4 fw-bold">{{ restore_result.duplicate_count }}</div>
+            <div class="text-muted small">重复战绩</div>
+        </div>
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-warning fs-4 fw-bold">{{ restore_result.missing_user_count }}</div>
+            <div class="text-muted small">缺失用户</div>
+        </div>
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-danger fs-4 fw-bold">{{ restore_result.format_error_count }}</div>
+            <div class="text-muted small">格式冲突</div>
+        </div>
+        <div class="card-dark px-4 py-3 rounded text-center">
+            <div class="text-gold fs-4 fw-bold">{{ restore_result.total_count }}</div>
+            <div class="text-muted small">总计处理</div>
+        </div>
+    </div>
+
+    <!-- Conflict categories -->
+    {% if categories %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark">
+            <h6 class="mb-0"><i class="bi bi-list-check text-gold"></i> 冲突分类统计</h6>
+        </div>
+        <div class="card-body-dark">
+            <div class="row g-3">
+                {% for cat in categories %}
+                <div class="col-sm-6 col-md-4 col-lg-3">
+                    <div class="p-3 rounded" style="background:#0d2030;border:1px solid #1e3a4f">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-light small">{{ cat.label }}</span>
+                            <span class="badge bg-{{ cat.color }}">{{ cat.count }}</span>
+                        </div>
+                        <div class="progress" style="height:6px">
+                            <div class="progress-bar bg-{{ cat.color }}" role="progressbar"
+                                 style="width:{% widthratio cat.count restore_result.total_count 100 %}%"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recoverable games -->
+    {% if restore_result.recoverable %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-check-circle text-success"></i>
+                可恢复记录 <span class="text-success">{{ restore_result.recoverable_count }}</span> 条
+            </h6>
+            <span class="badge bg-success">将被写入</span>
+        </div>
+        <div class="card-body-dark p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>时间</th>
+                            <th>地点</th>
+                            <th>类型</th>
+                            <th>底分</th>
+                            <th>玩家得分</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in restore_result.recoverable|slice:":20" %}
+                        <tr>
+                            <td class="text-muted">{{ item.index }}</td>
+                            <td>{{ item.game_data.game_time|slice:":16"|cut:"T" }}</td>
+                            <td>{{ item.game_data.location|default:"-" }}</td>
+                            <td>{{ item.game_data.game_type }}</td>
+                            <td>{{ item.game_data.base_score }}</td>
+                            <td>
+                                {% for player in item.game_data.players %}
+                                <span class="player-score-tag {% if player.score > 0 %}winner{% elif player.score < 0 %}loser{% endif %}">
+                                    {{ player.display_name|default:player.username }}: {{ player.score|stringformat:"+d" }}
+                                </span>
+                                {% endfor %}
+                            </td>
+                            <td class="text-muted">{{ item.game_data.notes|default:"-"|truncatechars:20 }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if restore_result.recoverable_count > 20 %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted small py-2">
+                                ... 还有 {{ restore_result.recoverable_count|add:"-20" }} 条可恢复记录
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Duplicates -->
+    {% if restore_result.duplicates %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-files text-info"></i>
+                重复战绩 <span class="text-info">{{ restore_result.duplicate_count }}</span> 条
+            </h6>
+            <span class="badge bg-info">将被跳过</span>
+        </div>
+        <div class="card-body-dark p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>时间</th>
+                            <th>地点</th>
+                            <th>玩家</th>
+                            <th>原因</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in restore_result.duplicates|slice:":10" %}
+                        <tr>
+                            <td class="text-muted">{{ item.index }}</td>
+                            <td>{{ item.game_data.game_time|slice:":16"|cut:"T" }}</td>
+                            <td>{{ item.game_data.location|default:"-" }}</td>
+                            <td>
+                                {% for player in item.game_data.players %}
+                                <span class="text-light small">{{ player.username }}</span>
+                                {% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td class="text-info">{{ item.message }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if restore_result.duplicate_count > 10 %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted small py-2">
+                                ... 还有 {{ restore_result.duplicate_count|add:"-10" }} 条重复记录
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Missing users -->
+    {% if restore_result.missing_users %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-person-x text-warning"></i>
+                缺失用户 <span class="text-warning">{{ restore_result.missing_user_count }}</span> 条
+            </h6>
+            <span class="badge bg-warning">将被跳过</span>
+        </div>
+        <div class="card-body-dark p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>时间</th>
+                            <th>缺失的用户名</th>
+                            <th>原因</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in restore_result.missing_users|slice:":10" %}
+                        <tr>
+                            <td class="text-muted">{{ item.index }}</td>
+                            <td>{{ item.game_data.game_time|slice:":16"|cut:"T" }}</td>
+                            <td>
+                                {% for username in item.details.missing_usernames %}
+                                <span class="badge bg-warning text-dark">{{ username }}</span>
+                                {% endfor %}
+                            </td>
+                            <td class="text-warning">{{ item.message }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if restore_result.missing_user_count > 10 %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted small py-2">
+                                ... 还有 {{ restore_result.missing_user_count|add:"-10" }} 条缺失用户记录
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Format errors -->
+    {% if restore_result.format_errors %}
+    <div class="card-dark mb-4">
+        <div class="card-header-dark d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-exclamation-triangle text-danger"></i>
+                格式冲突 <span class="text-danger">{{ restore_result.format_error_count }}</span> 条
+            </h6>
+            <span class="badge bg-danger">将被跳过</span>
+        </div>
+        <div class="card-body-dark p-0">
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>错误详情</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in restore_result.format_errors|slice:":10" %}
+                        <tr>
+                            <td class="text-muted">{{ item.index }}</td>
+                            <td class="text-danger">{{ item.message }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if restore_result.format_error_count > 10 %}
+                        <tr>
+                            <td colspan="2" class="text-center text-muted small py-2">
+                                ... 还有 {{ restore_result.format_error_count|add:"-10" }} 条格式错误
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if restore_result.recoverable_count == 0 %}
+    <div class="card-dark p-4 text-center mb-4">
+        <i class="bi bi-file-earmark-x fs-1 text-warning"></i>
+        <p class="mt-3 text-light">备份文件中没有可恢复的有效数据</p>
+        <p class="text-muted small">
+            可能原因：所有记录都与现有战绩重复、用户不存在或数据格式有误
+        </p>
+    </div>
+    {% endif %}
+
+    <form method="post" action="/games/restore/" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="restore_confirm" value="1">
+        <div class="d-flex gap-3">
+            {% if restore_result.recoverable_count > 0 %}
+            <button type="submit" class="btn btn-gold btn-lg">
+                <i class="bi bi-cloud-upload"></i> 确认恢复 {{ restore_result.recoverable_count }} 条数据
+            </button>
+            {% endif %}
+            <a href="/games/backup/" class="btn btn-outline-secondary btn-lg">返回备份页面</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 重新选择文件时，需要重新上传
+    var form = document.querySelector('form[action="/games/restore/"]');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // 这个表单是确认恢复用的，不需要文件
+        });
+    }
+});
+</script>
+{% endblock %}

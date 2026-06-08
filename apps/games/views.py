@@ -12,6 +12,7 @@ import json
 from .utils import (
     export_games_to_excel, export_games_to_pdf, get_import_template,
     parse_import_file, apply_game_filters, ImportResult,
+    analyze_backup_file, RestoreResult,
 )
 from apps.accounts.models import User
 
@@ -52,6 +53,9 @@ def game_list(request):
     import_result = request.session.pop('import_result', None)
     import_result_summary = request.session.pop('import_result_summary', None)
 
+    restore_result = request.session.pop('restore_result', None)
+    restore_result_summary = request.session.pop('restore_result_summary', None)
+
     context = {
         'page_obj': page_obj,
         'filter_form': filter_form,
@@ -64,6 +68,8 @@ def game_list(request):
         'import_errors': import_errors,
         'import_result': import_result,
         'import_result_summary': import_result_summary,
+        'restore_result': restore_result,
+        'restore_result_summary': restore_result_summary,
     }
     return render(request, 'games/list.html', context)
 
@@ -543,76 +549,100 @@ def backup_data(request):
 
 @login_required
 def restore_data(request):
-    """Manual data restore from JSON backup"""
+    """Manual data restore from JSON backup with conflict center"""
     if not request.user.is_staff:
         messages.error(request, '仅管理员可执行数据恢复。')
         return redirect('games:list')
 
     if request.method == 'POST':
-        file_obj = request.FILES.get('backup_file')
-        if not file_obj:
-            messages.error(request, '请选择备份文件。')
-            return redirect('games:restore')
-        try:
-            data = json.loads(file_obj.read().decode('utf-8'))
-            games_data = data.get('games', [])
-            if not isinstance(games_data, list):
-                raise ValueError('格式错误')
-        except Exception as e:
-            messages.error(request, f'备份文件解析失败：{e}')
-            return redirect('games:restore')
+        if request.POST.get('restore_confirm') == '1':
+            recoverable_data = request.session.pop('restore_recoverable_data', [])
+            summary = request.session.pop('restore_result_summary', {})
 
-        imported = 0
-        errors = []
-        with transaction.atomic():
-            for i, gd in enumerate(games_data, 1):
-                try:
+            if not recoverable_data:
+                messages.error(request, '会话已过期，请重新上传备份文件。')
+                return redirect('games:restore')
+
+            imported = 0
+            with transaction.atomic():
+                for gd in recoverable_data:
                     from datetime import datetime
                     from django.utils import timezone as tz
+
                     gt = datetime.fromisoformat(gd['game_time'])
                     if gt.tzinfo is None:
                         gt = tz.make_aware(gt)
 
                     players = []
-                    total = 0
-                    for pd in gd.get('players', []):
-                        u = User.objects.filter(username=pd['username']).first()
-                        if not u:
-                            errors.append(f'第{i}条：用户 {pd["username"]} 不存在，已跳过')
-                            break
-                        players.append((u, pd['score'], pd.get('is_winner', pd['score'] > 0)))
-                        total += pd['score']
-                    else:
-                        if len(players) < 2:
-                            errors.append(f'第{i}条：玩家数不足，已跳过')
-                            continue
-                        creator = User.objects.filter(username=gd.get('creator', '')).first() or request.user
-                        game = Game.objects.create(
-                            game_time=gt,
-                            location=gd.get('location', ''),
-                            game_type=gd.get('game_type', 'mahjong_16'),
-                            base_score=gd.get('base_score', 1),
-                            notes=gd.get('notes', ''),
-                            is_supplemental=gd.get('is_supplemental', True),
-                            creator=creator,
-                            status='completed',
+                    for p in gd['players']:
+                        u = User.objects.filter(username=p['username']).first()
+                        if u:
+                            players.append((u, p['score'], p.get('is_winner', p['score'] > 0)))
+
+                    if len(players) < 2:
+                        continue
+
+                    creator_username = gd.get('creator_username', '')
+                    creator = User.objects.filter(username=creator_username).first() or request.user
+
+                    game = Game.objects.create(
+                        game_time=gt,
+                        location=gd.get('location', ''),
+                        game_type=gd.get('game_type', 'mahjong_16'),
+                        base_score=gd.get('base_score', 1),
+                        notes=gd.get('notes', ''),
+                        is_supplemental=gd.get('is_supplemental', True),
+                        creator=creator,
+                        status='completed',
+                    )
+
+                    sorted_players = sorted(players, key=lambda x: x[1], reverse=True)
+                    for rank, (u, score, is_win) in enumerate(sorted_players, 1):
+                        GamePlayer.objects.create(
+                            game=game,
+                            user=u,
+                            score=score,
+                            rank=rank,
+                            is_winner=is_win,
                         )
-                        for u, score, is_win in players:
-                            GamePlayer.objects.create(game=game, user=u, score=score, is_winner=is_win)
-                        imported += 1
-                except Exception as e:
-                    errors.append(f'第{i}条：导入失败 - {e}')
+                    imported += 1
 
-        # Recalculate all stats
-        for stats in PlayerStats.objects.all():
-            stats.recalculate()
+            for stats in PlayerStats.objects.all():
+                stats.recalculate()
 
-        if imported:
-            messages.success(request, f'成功恢复 {imported} 条战绩。')
-        if errors:
-            for err in errors[:10]:
-                messages.warning(request, err)
-        return redirect('games:list')
+            dup_count = summary.get('duplicate_count', 0)
+            miss_count = summary.get('missing_user_count', 0)
+            fmt_count = summary.get('format_error_count', 0)
+            total_skipped = dup_count + miss_count + fmt_count
+
+            request.session['restore_result_summary'] = summary
+            request.session['restore_result'] = (
+                f'恢复完成：成功 {imported} 条，'
+                f'跳过 {total_skipped} 条'
+                f'（重复 {dup_count} / '
+                f'缺失用户 {miss_count} / '
+                f'格式错误 {fmt_count}）'
+            )
+            return redirect('games:list')
+
+        file_obj = request.FILES.get('backup_file')
+        if not file_obj:
+            messages.error(request, '请选择备份文件。')
+            return redirect('games:restore')
+
+        restore_result = analyze_backup_file(file_obj)
+
+        request.session['restore_recoverable_data'] = [
+            item.game_data for item in restore_result.recoverable
+        ]
+        request.session['restore_result_summary'] = restore_result.get_summary_dict()
+
+        context = {
+            'restore_result': restore_result,
+            'categories': restore_result.get_category_summary(),
+            'total': restore_result.recoverable_count,
+        }
+        return render(request, 'games/restore_preview.html', context)
 
     return render(request, 'games/backup.html')
 
