@@ -63,11 +63,220 @@
             </div>
             <div class="col-6 col-md-3">
                 <div class="stat-card text-center">
-                    <div class="stat-number">{{ recent_highlights|length }}</div>
-                    <div class="stat-label">精选高光</div>
+                    <div class="stat-number">{{ monthly_highlights_count }}</div>
+                    <div class="stat-label">本月高光</div>
                 </div>
             </div>
         </div>
+    </div>
+</section>
+
+<!-- Monthly Highlights Broadcast -->
+<section class="monthly-broadcast-section py-4">
+    <div class="container">
+        <div class="broadcast-header mb-4">
+            <div class="d-flex align-items-center gap-3">
+                <div class="broadcast-icon">
+                    <i class="bi bi-megaphone-fill"></i>
+                </div>
+                <div>
+                    <h2 class="broadcast-title mb-0">{{ current_year }}年{{ current_month }}月 · 高光播报</h2>
+                    <p class="broadcast-subtitle mb-0">本月最精彩的牌局焦点，不容错过</p>
+                </div>
+            </div>
+            <a href="/leaderboard/highlights/" class="btn btn-outline-gold btn-sm">
+                查看更多 <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
+
+        <div class="row g-4">
+            <!-- Top Domination -->
+            <div class="col-md-4">
+                {% if monthly_top_domination %}
+            <a href="/games/{{ monthly_top_domination.game.pk }}/" class="broadcast-card broadcast-domination d-block text-decoration-none">
+                    <div class="broadcast-card-header">
+                        <span class="broadcast-badge badge-domination-lg">
+                            <i class="bi bi-lightning-charge"></i> 本月通吃王
+                        </span>
+                    </div>
+                    <div class="broadcast-card-body">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <img src="{{ monthly_top_domination.winner.get_avatar_url }}" alt="avatar" class="broadcast-avatar">
+                            <div class="flex-grow-1">
+                                <div class="broadcast-player-name">{{ monthly_top_domination.winner.get_display_name }}</div>
+                                <div class="broadcast-date">{{ monthly_top_domination.game.game_time|date:"m月d日" }}</div>
+                            </div>
+                            <div class="broadcast-score">+{{ monthly_top_domination.domination_score }}</div>
+                        </div>
+                        <div class="broadcast-highlight-title">{{ monthly_top_domination.get_display_title }}</div>
+                        {% if monthly_top_domination.featured_note %}
+                        <div class="broadcast-note">
+                            <i class="bi bi-chat-quote"></i> {{ monthly_top_domination.featured_note }}
+                        </div>
+                        {% endif %}
+                        <div class="broadcast-stats mt-3">
+                            <span class="broadcast-stat-item">
+                                <i class="bi bi-trophy"></i> 本月 {{ monthly_domination_count }} 次通吃
+                            </span>
+                        </div>
+                    </div>
+                </a>
+                {% else %}
+                <div class="broadcast-card broadcast-empty">
+                    <div class="broadcast-card-header">
+                        <span class="broadcast-badge badge-domination-lg">
+                            <i class="bi bi-lightning-charge"></i> 本月通吃王
+                        </span>
+                    </div>
+                    <div class="broadcast-card-body text-center">
+                        <i class="bi bi-emoji-neutral fs-1 text-muted mb-2"></i>
+                        <p class="text-muted mb-0">本月暂无通吃记录</p>
+                        <p class="text-muted small">快去创造第一个通吃吧！</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Top Comeback -->
+            <div class="col-md-4">
+                {% if monthly_top_comeback %}
+                <a href="/games/{{ monthly_top_comeback.game.pk }}/" class="broadcast-card broadcast-comeback d-block text-decoration-none">
+                    <div class="broadcast-card-header">
+                        <span class="broadcast-badge badge-comeback-lg">
+                            <i class="bi bi-arrow-counterclockwise"></i> 本月逆转王
+                        </span>
+                    </div>
+                    <div class="broadcast-card-body">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <img src="{{ monthly_top_comeback.winner.get_avatar_url }}" alt="avatar" class="broadcast-avatar">
+                            <div class="flex-grow-1">
+                                <div class="broadcast-player-name">{{ monthly_top_comeback.winner.get_display_name }}</div>
+                                <div class="broadcast-date">{{ monthly_top_comeback.game.game_time|date:"m月d日" }}</div>
+                            </div>
+                            <div class="broadcast-comeback-deficit">
+                                <span class="deficit-label">落后</span>
+                                <span class="deficit-value">{{ monthly_top_comeback.comeback_deficit }}</span>
+                            </div>
+                        </div>
+                        <div class="broadcast-highlight-title">{{ monthly_top_comeback.get_display_title }}</div>
+                        {% if monthly_top_comeback.featured_note %}
+                        <div class="broadcast-note">
+                            <i class="bi bi-chat-quote"></i> {{ monthly_top_comeback.featured_note }}
+                        </div>
+                        {% endif %}
+                        <div class="broadcast-stats mt-3">
+                            <span class="broadcast-stat-item">
+                                <i class="bi bi-arrow-up-circle"></i> 本月 {{ monthly_comeback_count }} 次逆转
+                            </span>
+                        </div>
+                    </div>
+                </a>
+                {% else %}
+                <div class="broadcast-card broadcast-empty">
+                    <div class="broadcast-card-header">
+                        <span class="broadcast-badge badge-comeback-lg">
+                            <i class="bi bi-arrow-counterclockwise"></i> 本月逆转王
+                        </span>
+                    </div>
+                    <div class="broadcast-card-body text-center">
+                        <i class="bi bi-emoji-neutral fs-1 text-muted mb-2"></i>
+                        <p class="text-muted mb-0">本月暂无逆转记录</p>
+                        <p class="text-muted small">期待你的绝地反击！</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Top Big Win -->
+            <div class="col-md-4">
+                {% if monthly_top_bigwin %}
+                <a href="/games/{{ monthly_top_bigwin.game.pk }}/" class="broadcast-card broadcast-bigwin d-block text-decoration-none">
+                    <div class="broadcast-card-header">
+                        <span class="broadcast-badge badge-bigwin-lg">
+                            <i class="bi bi-star-fill"></i> 本月最高分
+                        </span>
+                    </div>
+                    <div class="broadcast-card-body">
+                        <div class="d-flex align-items-center gap-3 mb-3">
+                            <img src="{{ monthly_top_bigwin.winner.get_avatar_url }}" alt="avatar" class="broadcast-avatar">
+                            <div class="flex-grow-1">
+                                <div class="broadcast-player-name">{{ monthly_top_bigwin.winner.get_display_name }}</div>
+                                <div class="broadcast-date">{{ monthly_top_bigwin.game.game_time|date:"m月d日" }}</div>
+                            </div>
+                            <div class="broadcast-highlight-score">
+                                <span class="hs-value">{{ monthly_top_bigwin.highlight_score }}</span>
+                                <span class="hs-label">精彩度</span>
+                            </div>
+                        </div>
+                        <div class="broadcast-highlight-title">{{ monthly_top_bigwin.get_display_title }}</div>
+                        {% if monthly_top_bigwin.featured_note %}
+                        <div class="broadcast-note">
+                            <i class="bi bi-chat-quote"></i> {{ monthly_top_bigwin.featured_note }}
+                        </div>
+                        {% endif %}
+                        <div class="broadcast-stats mt-3">
+                            <span class="broadcast-stat-item">
+                                <i class="bi bi-stars"></i> 本月 {{ monthly_highlights_count }} 个高光
+                            </span>
+                        </div>
+                    </div>
+                </a>
+                {% else %}
+                <div class="broadcast-card broadcast-empty">
+                    <div class="broadcast-card-header">
+                        <span class="broadcast-badge badge-bigwin-lg">
+                            <i class="bi bi-star-fill"></i> 本月最高分
+                        </span>
+                    </div>
+                    <div class="broadcast-card-body text-center">
+                        <i class="bi bi-emoji-neutral fs-1 text-muted mb-2"></i>
+                        <p class="text-muted mb-0">本月暂无高光记录</p>
+                        <p class="text-muted small">录入战绩产生高光！</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Monthly Top Highlights Grid -->
+        {% if monthly_top_highlights %}
+        <div class="monthly-highlights-grid mt-4">
+            <h5 class="mb-3"><i class="bi bi-fire text-gold"></i> 本月精彩时刻 TOP3</h5>
+            <div class="row g-3">
+                {% for highlight in monthly_top_highlights %}
+                <div class="col-md-4">
+                    <div class="highlight-card p-3 rounded {% if highlight.is_pinned %}highlight-pinned-card{% endif %}">
+                        {% if highlight.is_pinned %}
+                        <span class="badge bg-danger mb-2"><i class="bi bi-pin-angle-fill"></i> 置顶</span>
+                        {% endif %}
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <img src="{{ highlight.winner.get_avatar_url }}" alt="avatar" class="player-avatar">
+                            <div>
+                                <div class="player-name">{{ highlight.winner.get_display_name }}</div>
+                                <div class="small text-muted">{{ highlight.game.game_time|date:"m月d日" }}</div>
+                            </div>
+                            <div class="ms-auto highlight-score-badge">{{ highlight.highlight_score }}</div>
+                        </div>
+                        <div class="highlight-title">{{ highlight.get_display_title }}</div>
+                        {% if highlight.featured_note %}
+                        <div class="highlight-featured-note mt-1">
+                            <i class="bi bi-chat-quote"></i> {{ highlight.featured_note }}
+                        </div>
+                        {% endif %}
+                        {% if highlight.description and not highlight.featured_note %}
+                        <div class="highlight-desc text-muted small mt-1">{{ highlight.description }}</div>
+                        {% endif %}
+                        <div class="mt-2">
+                            <span class="badge badge-highlight-type badge-{{ highlight.highlight_type }}">
+                                {{ highlight.get_highlight_type_display }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </section>
 

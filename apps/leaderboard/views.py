@@ -30,11 +30,47 @@ def home(request):
 
     # This month's stats
     now = timezone.now()
+    this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     this_month_games = Game.objects.filter(
         status='completed',
         game_time__year=now.year,
         game_time__month=now.month
     ).count()
+
+    # Monthly highlights broadcast data
+    monthly_highlights_qs = Highlight.objects.filter(
+        game__status='completed',
+        game__game_time__gte=this_month_start
+    ).select_related('winner', 'game').prefetch_related('game__players__user')
+
+    # Top domination of the month
+    monthly_top_domination = monthly_highlights_qs.filter(
+        is_domination=True
+    ).order_by('-domination_score', '-highlight_score').first()
+
+    # Top comeback of the month
+    monthly_top_comeback = monthly_highlights_qs.filter(
+        is_comeback=True
+    ).order_by('-comeback_deficit', '-highlight_score').first()
+
+    # Top big win of the month (highest highlight score among big_win type)
+    monthly_top_bigwin = monthly_highlights_qs.filter(
+        highlight_type='big_win'
+    ).order_by('-highlight_score').first()
+
+    # If no big_win type, fall back to highest overall highlight score
+    if not monthly_top_bigwin:
+        monthly_top_bigwin = monthly_highlights_qs.order_by('-highlight_score').first()
+
+    # Monthly highlight stats
+    monthly_domination_count = monthly_highlights_qs.filter(is_domination=True).count()
+    monthly_comeback_count = monthly_highlights_qs.filter(is_comeback=True).count()
+    monthly_highlights_count = monthly_highlights_qs.count()
+
+    # Get top 3 most exciting highlights of the month
+    monthly_top_highlights = monthly_highlights_qs.order_by(
+        '-is_pinned', '-is_featured', '-highlight_score'
+    )[:3]
 
     context = {
         'total_games': total_games,
@@ -43,6 +79,15 @@ def home(request):
         'recent_games': recent_games,
         'recent_highlights': recent_highlights,
         'this_month_games': this_month_games,
+        'monthly_top_domination': monthly_top_domination,
+        'monthly_top_comeback': monthly_top_comeback,
+        'monthly_top_bigwin': monthly_top_bigwin,
+        'monthly_domination_count': monthly_domination_count,
+        'monthly_comeback_count': monthly_comeback_count,
+        'monthly_highlights_count': monthly_highlights_count,
+        'monthly_top_highlights': monthly_top_highlights,
+        'current_month': now.month,
+        'current_year': now.year,
     }
     return render(request, 'home.html', context)
 
