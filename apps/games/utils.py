@@ -258,9 +258,9 @@ def export_games_to_excel(games_qs, view_mode='score'):
     )
 
     if view_mode == 'amount':
-        headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分(元/分)', '参与玩家', '各玩家金额(元)', '是否补录', '备注']
+        headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分(元/分)', '参与玩家', '各玩家金额(元)', '录入类型', '补录来源', '备注']
     else:
-        headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分', '参与玩家', '各玩家得分', '是否补录', '备注']
+        headers = ['游戏ID', '游戏时间', '地点', '游戏类型', '底分', '参与玩家', '各玩家得分', '录入类型', '补录来源', '备注']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -286,7 +286,8 @@ def export_games_to_excel(games_qs, view_mode='score'):
             game.base_score,
             player_names,
             player_scores,
-            '是' if game.is_supplemental else '否',
+            '补录' if game.is_supplemental else '正常录入',
+            game.get_supplemental_source_display() if game.supplemental_source else '-',
             game.notes or '',
         ]
 
@@ -298,7 +299,7 @@ def export_games_to_excel(games_qs, view_mode='score'):
                 cell.fill = PatternFill(start_color='f0f8ff', end_color='f0f8ff', fill_type='solid')
 
     # Auto-width columns
-    col_widths = [10, 18, 15, 15, 8, 25, 35, 10, 20]
+    col_widths = [10, 18, 15, 15, 8, 25, 35, 10, 12, 20]
     for col, width in enumerate(col_widths, 1):
         ws.column_dimensions[ws.cell(row=1, column=col).column_letter].width = width
 
@@ -555,6 +556,9 @@ def apply_game_filters(queryset, form):
         is_supp = data.get('is_supplemental') == '1'
         if data.get('is_supplemental'):
             queryset = queryset.filter(is_supplemental=is_supp)
+
+    if data.get('supplemental_source'):
+        queryset = queryset.filter(supplemental_source=data['supplemental_source'])
 
     if data.get('search'):
         from django.db.models import Q
@@ -1007,6 +1011,7 @@ def analyze_backup_file(file_obj):
                     'base_score': gd.get('base_score', 1),
                     'notes': gd.get('notes', ''),
                     'is_supplemental': gd.get('is_supplemental', True),
+                    'supplemental_source': gd.get('supplemental_source', ''),
                     'creator_username': creator_username,
                     'creator_exists': creator is not None,
                     'players': [

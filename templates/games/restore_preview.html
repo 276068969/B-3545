@@ -79,6 +79,7 @@
                             <th>地点</th>
                             <th>类型</th>
                             <th>底分</th>
+                            <th>来源</th>
                             <th>玩家得分</th>
                             <th>备注</th>
                         </tr>
@@ -92,6 +93,19 @@
                             <td>{{ item.game_data.game_type }}</td>
                             <td>{{ item.game_data.base_score }}</td>
                             <td>
+                                {% if item.game_data.supplemental_source == 'manual' %}
+                                <span class="badge badge-supp-manual">手工补录</span>
+                                {% elif item.game_data.supplemental_source == 'batch_import' %}
+                                <span class="badge badge-supp-batch">批量导入</span>
+                                {% elif item.game_data.supplemental_source == 'data_restore' %}
+                                <span class="badge badge-supp-restore">数据恢复</span>
+                                {% elif item.game_data.is_supplemental %}
+                                <span class="badge badge-supp">补录</span>
+                                {% else %}
+                                <span class="text-muted small">正常录入</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% for player in item.game_data.players %}
                                 <span class="player-score-tag {% if player.score > 0 %}winner{% elif player.score < 0 %}loser{% endif %}">
                                     {{ player.display_name|default:player.username }}: {{ player.score|stringformat:"+d" }}
@@ -103,7 +117,7 @@
                         {% endfor %}
                         {% if restore_result.recoverable_count > 20 %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted small py-2">
+                            <td colspan="8" class="text-center text-muted small py-2">
                                 ... 还有 {{ restore_result.recoverable_count|add:"-20" }} 条可恢复记录
                             </td>
                         </tr>
@@ -133,6 +147,7 @@
                             <th>#</th>
                             <th>时间</th>
                             <th>地点</th>
+                            <th>来源</th>
                             <th>玩家</th>
                             <th>原因</th>
                         </tr>
@@ -144,6 +159,19 @@
                             <td>{{ item.game_data.game_time|slice:":16"|cut:"T" }}</td>
                             <td>{{ item.game_data.location|default:"-" }}</td>
                             <td>
+                                {% if item.game_data.supplemental_source == 'manual' %}
+                                <span class="badge badge-supp-manual">手工补录</span>
+                                {% elif item.game_data.supplemental_source == 'batch_import' %}
+                                <span class="badge badge-supp-batch">批量导入</span>
+                                {% elif item.game_data.supplemental_source == 'data_restore' %}
+                                <span class="badge badge-supp-restore">数据恢复</span>
+                                {% elif item.game_data.is_supplemental %}
+                                <span class="badge badge-supp">补录</span>
+                                {% else %}
+                                <span class="text-muted small">正常</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% for player in item.game_data.players %}
                                 <span class="text-light small">{{ player.username }}</span>
                                 {% if not forloop.last %}, {% endif %}
@@ -154,7 +182,7 @@
                         {% endfor %}
                         {% if restore_result.duplicate_count > 10 %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted small py-2">
+                            <td colspan="6" class="text-center text-muted small py-2">
                                 ... 还有 {{ restore_result.duplicate_count|add:"-10" }} 条重复记录
                             </td>
                         </tr>
@@ -183,6 +211,7 @@
                         <tr>
                             <th>#</th>
                             <th>时间</th>
+                            <th>来源</th>
                             <th>缺失的用户名</th>
                             <th>原因</th>
                         </tr>
@@ -193,6 +222,19 @@
                             <td class="text-muted">{{ item.index }}</td>
                             <td>{{ item.game_data.game_time|slice:":16"|cut:"T" }}</td>
                             <td>
+                                {% if item.game_data.supplemental_source == 'manual' %}
+                                <span class="badge badge-supp-manual">手工补录</span>
+                                {% elif item.game_data.supplemental_source == 'batch_import' %}
+                                <span class="badge badge-supp-batch">批量导入</span>
+                                {% elif item.game_data.supplemental_source == 'data_restore' %}
+                                <span class="badge badge-supp-restore">数据恢复</span>
+                                {% elif item.game_data.is_supplemental %}
+                                <span class="badge badge-supp">补录</span>
+                                {% else %}
+                                <span class="text-muted small">正常</span>
+                                {% endif %}
+                            </td>
+                            <td>
                                 {% for username in item.details.missing_usernames %}
                                 <span class="badge bg-warning text-dark">{{ username }}</span>
                                 {% endfor %}
@@ -202,7 +244,7 @@
                         {% endfor %}
                         {% if restore_result.missing_user_count > 10 %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted small py-2">
+                            <td colspan="5" class="text-center text-muted small py-2">
                                 ... 还有 {{ restore_result.missing_user_count|add:"-10" }} 条缺失用户记录
                             </td>
                         </tr>

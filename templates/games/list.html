@@ -70,7 +70,11 @@
                             {{ filter_form.is_supplemental.label_tag }}
                             {{ filter_form.is_supplemental }}
                         </div>
-                        <div class="col-12 col-md-3">
+                        <div class="col-6 col-md-2">
+                            {{ filter_form.supplemental_source.label_tag }}
+                            {{ filter_form.supplemental_source }}
+                        </div>
+                        <div class="col-12 col-md-2">
                             {{ filter_form.search.label_tag }}
                             {{ filter_form.search }}
                         </div>
@@ -144,7 +148,13 @@
                             <div class="mt-1">
                                 <span class="badge bg-secondary me-1">{{ game.get_game_type_display }}</span>
                                 <span class="text-muted small">底分 {{ game.base_score }}元/分</span>
-                                {% if game.is_supplemental %}
+                                {% if game.is_supplemental and game.supplemental_source == 'manual' %}
+                                <span class="badge badge-supp-manual ms-1">手工补录</span>
+                                {% elif game.is_supplemental and game.supplemental_source == 'batch_import' %}
+                                <span class="badge badge-supp-batch ms-1">批量导入</span>
+                                {% elif game.is_supplemental and game.supplemental_source == 'data_restore' %}
+                                <span class="badge badge-supp-restore ms-1">数据恢复</span>
+                                {% elif game.is_supplemental %}
                                 <span class="badge badge-supp ms-1">补录</span>
                                 {% endif %}
                             </div>

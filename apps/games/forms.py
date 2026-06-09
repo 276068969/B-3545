@@ -104,6 +104,11 @@ class GameFilterForm(forms.Form):
         required=False, label='录入类型',
         widget=forms.Select(attrs={'class': 'form-select'})
     )
+    supplemental_source = forms.ChoiceField(
+        choices=[('', '全部来源')] + Game.SUPPLEMENTAL_SOURCE_CHOICES,
+        required=False, label='补录来源',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
     search = forms.CharField(
         required=False, label='搜索',
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '搜索地点、备注...'})

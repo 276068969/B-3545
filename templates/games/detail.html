@@ -16,7 +16,15 @@
             <div>
                 <span class="badge bg-secondary">{{ game.get_game_type_display }}</span>
                 <span class="text-muted small ms-2">底分 {{ game.base_score }} 元/分</span>
-                {% if game.is_supplemental %}<span class="badge badge-supp ms-1">补录</span>{% endif %}
+                {% if game.is_supplemental and game.supplemental_source == 'manual' %}
+                <span class="badge badge-supp-manual ms-1">手工补录</span>
+                {% elif game.is_supplemental and game.supplemental_source == 'batch_import' %}
+                <span class="badge badge-supp-batch ms-1">批量导入</span>
+                {% elif game.is_supplemental and game.supplemental_source == 'data_restore' %}
+                <span class="badge badge-supp-restore ms-1">数据恢复</span>
+                {% elif game.is_supplemental %}
+                <span class="badge badge-supp ms-1">补录</span>
+                {% endif %}
                 <span class="text-muted small ms-2">录入人: {{ game.creator.get_display_name }}</span>
             </div>
         </div>
@@ -97,6 +105,71 @@
                     </div>
                 </div>
                 {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Settlement Amount Card -->
+    <div class="card-dark mb-4 settlement-card">
+        <div class="card-header-dark">
+            <h6 class="mb-0">
+                <i class="bi bi-cash-stack text-gold"></i>
+                结算金额
+                <span class="text-muted small ms-2">— 实际输赢一览</span>
+            </h6>
+            <div class="d-flex gap-2 align-items-center">
+                {% if game.room %}
+                <span class="badge bg-secondary"><i class="bi bi-house-door"></i> {{ game.room.name }}</span>
+                {% endif %}
+                <span class="text-muted small">底分 {{ game.base_score }} 元/分</span>
+            </div>
+        </div>
+        <div class="card-body-dark">
+            <div class="row g-3 mb-3">
+                {% for gp in players %}
+                <div class="col-md-6 col-lg-3">
+                    <div class="settlement-item h-100 {% if gp.is_winner %}settlement-winner{% elif gp.score < 0 %}settlement-loser{% endif %}">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div class="result-rank rank-{{ gp.rank }}">{{ gp.rank }}</div>
+                            <img src="{{ gp.user.get_avatar_url }}" class="mini-avatar">
+                            <div class="flex-grow-1">
+                                <div class="settlement-player-name">
+                                    {{ gp.user.get_display_name }}
+                                    {% if gp.is_winner %}
+                                    <i class="bi bi-crown-fill text-gold ms-1"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="settlement-score text-muted small">
+                                    {{ gp.score|stringformat:"+d" }} 分
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settlement-amount {% if gp.score > 0 %}text-win{% elif gp.score < 0 %}text-loss{% else %}text-muted{% endif %}">
+                            ¥{{ gp.get_amount|stringformat:"+d" }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-3 border-top border-secondary">
+                <div class="d-flex gap-4 align-items-center">
+                    <div>
+                        <span class="text-muted small">赢家</span>
+                        <span class="ms-2 text-win fw-bold">
+                            {% for gp in players %}{% if gp.is_winner %}{{ gp.user.get_display_name }}{% if not forloop.last %}、{% endif %}{% endif %}{% endfor %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-muted small">总分平衡</span>
+                        <span class="ms-2 {% if game.get_score_balance == 0 %}text-success{% else %}text-warning{% endif %} fw-bold">
+                            {{ game.get_score_balance|stringformat:"+d" }} 分
+                        </span>
+                    </div>
+                </div>
+                <div>
+                    <span class="text-muted small">总流水</span>
+                    <span class="ms-2 text-gold fw-bold">¥{{ game.get_total_flow_amount }}</span>
+                </div>
             </div>
         </div>
     </div>

@@ -75,7 +75,7 @@ def game_list(request):
 
 
 def game_detail(request, pk):
-    game = get_object_or_404(Game, pk=pk)
+    game = get_object_or_404(Game.objects.select_related('room', 'creator'), pk=pk)
     players = game.players.select_related('user').prefetch_related('patterns__tile_pattern', 'patterns__shooter').order_by('-score')
     highlights = game.highlights.select_related('winner').all()
     snapshots = game.snapshots.select_related('player').order_by('round_number')
@@ -184,6 +184,8 @@ def create_game(request):
             if room:
                 game.room = room
             game.status = 'completed'
+            if game.is_supplemental and not game.supplemental_source:
+                game.supplemental_source = 'manual'
             game.save()
 
             max_score = max(score_values)
@@ -411,6 +413,7 @@ def import_games(request):
                     base_score=gd['base_score'],
                     notes=gd['notes'],
                     is_supplemental=True,
+                    supplemental_source='batch_import',
                     status='completed',
                 )
                 max_score = max(p['score'] for p in gd['players'])
@@ -535,6 +538,7 @@ def backup_data(request):
             'base_score': game.base_score,
             'notes': game.notes or '',
             'is_supplemental': game.is_supplemental,
+            'supplemental_source': game.supplemental_source,
             'creator': game.creator.username if game.creator else '',
             'players': players,
         })
@@ -592,6 +596,7 @@ def restore_data(request):
                         base_score=gd.get('base_score', 1),
                         notes=gd.get('notes', ''),
                         is_supplemental=gd.get('is_supplemental', True),
+                        supplemental_source=gd.get('supplemental_source', 'data_restore'),
                         creator=creator,
                         status='completed',
                     )

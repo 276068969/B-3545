@@ -377,6 +377,9 @@ th.active-sort { background: rgba(201,162,39,0.06) !important; }
 
 /* ---- Badges ---- */
 .badge-supp { background: rgba(52,152,219,0.25) !important; color: #3498db !important; }
+.badge-supp-manual { background: rgba(155,89,182,0.25) !important; color: #9b59b6 !important; border: 1px solid rgba(155,89,182,0.4) !important; }
+.badge-supp-batch { background: rgba(52,152,219,0.25) !important; color: #3498db !important; border: 1px solid rgba(52,152,219,0.4) !important; }
+.badge-supp-restore { background: rgba(243,156,18,0.25) !important; color: #f39c12 !important; border: 1px solid rgba(243,156,18,0.4) !important; }
 .badge-highlight-type {
     background: rgba(201,162,39,0.2) !important;
     color: var(--gold) !important;
@@ -1007,6 +1010,56 @@ th.active-sort { background: rgba(201,162,39,0.06) !important; }
 
 .highlight-section-card {
     border: 1px solid rgba(201,162,39,0.3);
+}
+
+/* ---- Settlement Card ---- */
+.settlement-card {
+    background: linear-gradient(135deg, var(--bg-card) 0%, #162838 100%);
+    border: 1px solid rgba(201,162,39,0.35);
+}
+
+.settlement-item {
+    background: var(--bg-card-inner);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 14px;
+    transition: all 0.2s;
+}
+
+.settlement-item:hover {
+    border-color: rgba(201,162,39,0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.settlement-item.settlement-winner {
+    background: linear-gradient(135deg, rgba(46,204,113,0.1) 0%, var(--bg-card-inner) 100%);
+    border-color: rgba(46,204,113,0.4);
+    box-shadow: 0 0 20px rgba(46,204,113,0.1);
+}
+
+.settlement-item.settlement-loser {
+    background: linear-gradient(135deg, rgba(231,76,60,0.06) 0%, var(--bg-card-inner) 100%);
+    border-color: rgba(231,76,60,0.25);
+}
+
+.settlement-player-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.settlement-score {
+    font-size: 0.8rem;
+}
+
+.settlement-amount {
+    font-size: 1.6rem;
+    font-weight: 900;
+    text-align: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
 }
 
 /* ---- Pinned Ribbon ---- */

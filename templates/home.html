@@ -333,7 +333,13 @@
                                 {{ game.game_time|date:"m月d日 H:i" }}
                                 {% if game.location %} · {{ game.location }}{% endif %}
                             </a>
-                            {% if game.is_supplemental %}
+                            {% if game.is_supplemental and game.supplemental_source == 'manual' %}
+                            <span class="badge badge-supp-manual">手工补录</span>
+                            {% elif game.is_supplemental and game.supplemental_source == 'batch_import' %}
+                            <span class="badge badge-supp-batch">批量导入</span>
+                            {% elif game.is_supplemental and game.supplemental_source == 'data_restore' %}
+                            <span class="badge badge-supp-restore">数据恢复</span>
+                            {% elif game.is_supplemental %}
                             <span class="badge badge-supp">补录</span>
                             {% endif %}
                         </div>

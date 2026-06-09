@@ -20,8 +20,8 @@ class GamePlayerInline(admin.TabularInline):
 
 @admin.register(Game)
 class GameAdmin(admin.ModelAdmin):
-    list_display = ('pk', 'game_time', 'location', 'game_type', 'status', 'creator', 'is_supplemental', 'created_at')
-    list_filter = ('status', 'game_type', 'is_supplemental')
+    list_display = ('pk', 'game_time', 'location', 'game_type', 'status', 'creator', 'is_supplemental', 'supplemental_source', 'created_at')
+    list_filter = ('status', 'game_type', 'is_supplemental', 'supplemental_source')
     search_fields = ('location', 'notes', 'creator__username')
     inlines = [GamePlayerInline]
     readonly_fields = ('created_at', 'updated_at')

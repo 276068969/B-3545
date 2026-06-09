@@ -43,6 +43,12 @@ class Game(models.Model):
         ('sichuan', '四川麻将'),
         ('other', '其他'),
     ]
+    SUPPLEMENTAL_SOURCE_CHOICES = [
+        ('', '正常录入'),
+        ('manual', '手工补录'),
+        ('batch_import', '批量导入'),
+        ('data_restore', '数据恢复'),
+    ]
 
     room = models.ForeignKey(
         'rooms.Room', on_delete=models.SET_NULL, null=True, blank=True,
@@ -57,6 +63,10 @@ class Game(models.Model):
     game_type = models.CharField('游戏类型', max_length=20, choices=GAME_TYPE_CHOICES, default='mahjong_16')
     base_score = models.IntegerField('基础分值', default=1, help_text='每分对应的金额（元）')
     is_supplemental = models.BooleanField('是否为补录', default=False)
+    supplemental_source = models.CharField(
+        '补录来源', max_length=20, choices=SUPPLEMENTAL_SOURCE_CHOICES,
+        default='', blank=True, help_text='补录记录的来源类型'
+    )
     notes = models.TextField('备注', blank=True)
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='active')
     created_at = models.DateTimeField('录入时间', auto_now_add=True)
@@ -86,6 +96,13 @@ class Game(models.Model):
     def get_score_balance(self):
         from django.db.models import Sum
         return self.players.aggregate(total=Sum('score'))['total'] or 0
+
+    def get_total_flow_amount(self):
+        total = 0
+        for gp in self.players.all():
+            if gp.score > 0:
+                total += gp.get_amount()
+        return total
 
 
 class GamePlayer(models.Model):
