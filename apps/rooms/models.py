@@ -194,8 +194,12 @@ class Room(models.Model):
         from django.db.models import Count, Sum, Max
         from apps.games.models import Game, GamePlayer
 
-        completed_games = Game.objects.filter(room=self, status='completed')
+        all_games = Game.objects.filter(room=self)
+        completed_games = all_games.filter(status='completed')
         total_games = completed_games.count()
+
+        latest_game = all_games.order_by('-game_time').first()
+        last_active_at = latest_game.game_time if latest_game else None
 
         if total_games == 0:
             return {
@@ -205,13 +209,10 @@ class Room(models.Model):
                 'host_wins': 0,
                 'host_games': 0,
                 'total_amount': 0,
-                'last_active_at': None,
+                'last_active_at': last_active_at,
                 'regular_players': [],
                 'top_winners': [],
             }
-
-        last_game = completed_games.order_by('-game_time').first()
-        last_active_at = last_game.game_time if last_game else None
 
         from apps.games.models import GameSnapshot
         total_rounds = GameSnapshot.objects.filter(
