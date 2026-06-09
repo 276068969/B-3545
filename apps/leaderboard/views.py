@@ -441,6 +441,7 @@ def player_vs_player(request):
     player1_id = request.GET.get('player1')
     player2_id = request.GET.get('player2')
     all_users = User.objects.filter(is_active=True).order_by('username')
+    game_type_choices = Game.GAME_TYPE_CHOICES
 
     comparison = None
     if player1_id and player2_id:
@@ -456,6 +457,7 @@ def player_vs_player(request):
         'player1_id': player1_id,
         'player2_id': player2_id,
         'comparison': comparison,
+        'game_type_choices': game_type_choices,
     }
     return render(request, 'leaderboard/vs.html', context)
 
@@ -477,6 +479,7 @@ def get_vs_stats(p1, p2):
     p2_total_score = 0
 
     game_history = []
+    all_games_json = []
     cumulative_p1 = 0
     cumulative_p2 = 0
     cumulative_data = []
@@ -509,6 +512,18 @@ def get_vs_stats(p1, p2):
                 'p1_score': p1_gp.score,
                 'p2_score': p2_gp.score,
                 'result': result,
+            })
+            all_games_json.append({
+                'game_id': game.pk,
+                'game_time': game.game_time.isoformat(),
+                'game_type': game.game_type,
+                'game_type_label': game.get_game_type_display(),
+                'p1_score': p1_gp.score,
+                'p2_score': p2_gp.score,
+                'result': result,
+                'score_diff': p1_gp.score - p2_gp.score,
+                'game_num': idx,
+                'label': game.game_time.strftime('%m/%d'),
             })
             cumulative_data.append({
                 'game_num': idx,
@@ -556,5 +571,6 @@ def get_vs_stats(p1, p2):
         'p1_total_score': p1_total_score,
         'p2_total_score': p2_total_score,
         'game_history': game_history[-10:],
+        'all_games_json': json.dumps(all_games_json),
         'chart_data_json': json.dumps(chart_data),
     }

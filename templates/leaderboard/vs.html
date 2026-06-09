@@ -51,34 +51,32 @@
         <div class="col-12">
             <div class="card-dark">
                 <div class="card-header-dark">
-                    <h6 class="mb-0"><i class="bi bi-bar-chart text-gold"></i> 正面交手统计（共 {{ comparison.total }} 场）</h6>
+                    <h6 id="summary-total" class="mb-0"><i class="bi bi-bar-chart text-gold"></i> 正面交手统计（共 {{ comparison.total }} 场）</h6>
                 </div>
                 <div class="card-body-dark">
                     <div class="row align-items-center text-center">
                         <div class="col">
                             <img src="{{ comparison.p1.get_avatar_url }}" class="profile-avatar-sm mb-2">
                             <div class="fw-bold text-light fs-5">{{ comparison.p1.get_display_name }}</div>
-                            <div class="vs-win-count text-win">{{ comparison.p1_wins }}</div>
+                            <div id="p1-wins" class="vs-win-count text-win">{{ comparison.p1_wins }}</div>
                             <div class="text-muted small">胜利</div>
-                            <div class="mt-2 {% if comparison.p1_total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                            <div id="p1-total-score" class="mt-2 {% if comparison.p1_total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
                                 {{ comparison.p1_total_score|stringformat:"+d" }} 分
                             </div>
-                            <div class="text-muted small">场均 {{ comparison.p1_avg_score|floatformat:1 }}</div>
+                            <div id="p1-avg-score" class="text-muted small">场均 {{ comparison.p1_avg_score|floatformat:1 }}</div>
                         </div>
                         <div class="col-auto px-4">
                             <div class="vs-separator">
                                 <div class="text-gold fs-2">VS</div>
-                                {% if comparison.draws > 0 %}
-                                <div class="text-muted small">{{ comparison.draws }} 平</div>
-                                {% endif %}
+                                <div id="draws-count" class="text-muted small" {% if comparison.draws == 0 %}style="display:none"{% endif %}>{{ comparison.draws }} 平</div>
                             </div>
                             <!-- Bar comparison -->
                             <div class="vs-bar-wrapper mt-3">
                                 {% if comparison.total > 0 %}
                                 {% with p1_pct=comparison.p1_wins|stringformat:"s" %}
                                 <div class="vs-bar">
-                                    <div class="vs-bar-p1" style="width:{% widthratio comparison.p1_wins comparison.total 100 %}%"></div>
-                                    <div class="vs-bar-p2" style="width:{% widthratio comparison.p2_wins comparison.total 100 %}%"></div>
+                                    <div id="vs-bar-p1" class="vs-bar-p1" style="width:{% widthratio comparison.p1_wins comparison.total 100 %}%"></div>
+                                    <div id="vs-bar-p2" class="vs-bar-p2" style="width:{% widthratio comparison.p2_wins comparison.total 100 %}%"></div>
                                 </div>
                                 {% endwith %}
                                 {% endif %}
@@ -87,12 +85,12 @@
                         <div class="col">
                             <img src="{{ comparison.p2.get_avatar_url }}" class="profile-avatar-sm mb-2">
                             <div class="fw-bold text-light fs-5">{{ comparison.p2.get_display_name }}</div>
-                            <div class="vs-win-count text-win">{{ comparison.p2_wins }}</div>
+                            <div id="p2-wins" class="vs-win-count text-win">{{ comparison.p2_wins }}</div>
                             <div class="text-muted small">胜利</div>
-                            <div class="mt-2 {% if comparison.p2_total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
+                            <div id="p2-total-score" class="mt-2 {% if comparison.p2_total_score >= 0 %}text-win{% else %}text-loss{% endif %}">
                                 {{ comparison.p2_total_score|stringformat:"+d" }} 分
                             </div>
-                            <div class="text-muted small">场均 {{ comparison.p2_avg_score|floatformat:1 }}</div>
+                            <div id="p2-avg-score" class="text-muted small">场均 {{ comparison.p2_avg_score|floatformat:1 }}</div>
                         </div>
                     </div>
                 </div>
@@ -139,8 +137,34 @@
         {% if comparison.game_history %}
         <div class="col-12">
             <div class="card-dark">
-                <div class="card-header-dark">
-                    <h6 class="mb-0"><i class="bi bi-clock-history text-gold"></i> 近期交手记录</h6>
+                <div class="card-header-dark d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="mb-0"><i class="bi bi-clock-history text-gold"></i> 交手记录 <span id="filtered-count" class="text-muted small">({{ comparison.total }} 场)</span></h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <select id="filter-period" class="form-select form-select-sm" style="width:auto;">
+                            <option value="all">全部时间</option>
+                            <option value="today">今天</option>
+                            <option value="week">本周</option>
+                            <option value="month">本月</option>
+                            <option value="3months">近3个月</option>
+                            <option value="6months">近6个月</option>
+                            <option value="year">近一年</option>
+                        </select>
+                        <select id="filter-result" class="form-select form-select-sm" style="width:auto;">
+                            <option value="all">全部结果</option>
+                            <option value="p1">{{ comparison.p1.get_display_name }} 胜</option>
+                            <option value="p2">{{ comparison.p2.get_display_name }} 胜</option>
+                            <option value="draw">平局</option>
+                        </select>
+                        <select id="filter-type" class="form-select form-select-sm" style="width:auto;">
+                            <option value="all">全部玩法</option>
+                            {% for key, label in game_type_choices %}
+                            <option value="{{ key }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button id="filter-reset" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-counterclockwise"></i> 重置
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body-dark p-0">
                     <div class="table-responsive">
@@ -150,11 +174,12 @@
                                     <th>时间</th>
                                     <th class="text-center">{{ comparison.p1.get_display_name }}</th>
                                     <th class="text-center">{{ comparison.p2.get_display_name }}</th>
+                                    <th class="text-center">玩法</th>
                                     <th class="text-center">结果</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for gh in comparison.game_history %}
+                            <tbody id="games-tbody">
+                                {% for gh in comparison.game_history reversed %}
                                 <tr>
                                     <td>
                                         <a href="/games/{{ gh.game.pk }}/" class="text-light">
@@ -166,6 +191,9 @@
                                     </td>
                                     <td class="text-center fw-bold {% if gh.p2_score > 0 %}text-win{% else %}text-loss{% endif %}">
                                         {{ gh.p2_score|stringformat:"+d" }}
+                                    </td>
+                                    <td class="text-center text-muted small">
+                                        {{ gh.game.get_game_type_display }}
                                     </td>
                                     <td class="text-center">
                                         {% if gh.result == 'p1' %}
@@ -181,6 +209,10 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="no-results" class="text-center text-muted py-4 d-none">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                        没有符合条件的对局记录
+                    </div>
                 </div>
             </div>
         </div>
@@ -193,6 +225,7 @@
 {% block extra_js %}
 <script>
 {% if comparison and comparison.total > 0 %}
+const allGames = {{ comparison.all_games_json|safe }};
 const chartData = {{ comparison.chart_data_json|safe }};
 const p1Name = "{{ comparison.p1.get_display_name }}";
 const p2Name = "{{ comparison.p2.get_display_name }}";
@@ -220,10 +253,267 @@ const chartDefaults = {
     }
 };
 
+let cumulativeChart = null;
+let winRatePieChart = null;
+let scoreDiffChart = null;
+
+function getPeriodStart(period) {
+    const now = new Date();
+    const start = new Date(now);
+    switch (period) {
+        case 'today':
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'week':
+            const day = start.getDay();
+            const diff = start.getDate() - day + (day === 0 ? -6 : 1);
+            start.setDate(diff);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'month':
+            start.setDate(1);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case '3months':
+            start.setMonth(start.getMonth() - 3);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case '6months':
+            start.setMonth(start.getMonth() - 6);
+            start.setHours(0, 0, 0, 0);
+            break;
+        case 'year':
+            start.setFullYear(start.getFullYear() - 1);
+            start.setHours(0, 0, 0, 0);
+            break;
+        default:
+            return null;
+    }
+    return start;
+}
+
+function filterGames() {
+    const period = document.getElementById('filter-period').value;
+    const result = document.getElementById('filter-result').value;
+    const type = document.getElementById('filter-type').value;
+    const periodStart = getPeriodStart(period);
+
+    return allGames.filter(g => {
+        if (periodStart) {
+            const gameDate = new Date(g.game_time);
+            if (gameDate < periodStart) return false;
+        }
+        if (result !== 'all' && g.result !== result) return false;
+        if (type !== 'all' && g.game_type !== type) return false;
+        return true;
+    });
+}
+
+function calculateStats(filtered) {
+    let p1Wins = 0, p2Wins = 0, draws = 0;
+    let p1Total = 0, p2Total = 0;
+    filtered.forEach(g => {
+        if (g.result === 'p1') p1Wins++;
+        else if (g.result === 'p2') p2Wins++;
+        else draws++;
+        p1Total += g.p1_score;
+        p2Total += g.p2_score;
+    });
+    const total = filtered.length;
+    return {
+        total,
+        p1Wins,
+        p2Wins,
+        draws,
+        p1TotalScore: p1Total,
+        p2TotalScore: p2Total,
+        p1AvgScore: total > 0 ? p1Total / total : 0,
+        p2AvgScore: total > 0 ? p2Total / total : 0,
+    };
+}
+
+function updateSummary(stats) {
+    const totalEl = document.getElementById('summary-total');
+    if (totalEl) {
+        totalEl.innerHTML = '<i class="bi bi-bar-chart text-gold"></i> 正面交手统计（共 ' + stats.total + ' 场）';
+    }
+
+    const p1WinsEl = document.getElementById('p1-wins');
+    if (p1WinsEl) p1WinsEl.textContent = stats.p1Wins;
+
+    const p1ScoreEl = document.getElementById('p1-total-score');
+    if (p1ScoreEl) {
+        p1ScoreEl.textContent = (stats.p1TotalScore >= 0 ? '+' : '') + stats.p1TotalScore + ' 分';
+        p1ScoreEl.className = 'mt-2 ' + (stats.p1TotalScore >= 0 ? 'text-win' : 'text-loss');
+    }
+
+    const p1AvgEl = document.getElementById('p1-avg-score');
+    if (p1AvgEl) p1AvgEl.textContent = '场均 ' + stats.p1AvgScore.toFixed(1);
+
+    const p2WinsEl = document.getElementById('p2-wins');
+    if (p2WinsEl) p2WinsEl.textContent = stats.p2Wins;
+
+    const p2ScoreEl = document.getElementById('p2-total-score');
+    if (p2ScoreEl) {
+        p2ScoreEl.textContent = (stats.p2TotalScore >= 0 ? '+' : '') + stats.p2TotalScore + ' 分';
+        p2ScoreEl.className = 'mt-2 ' + (stats.p2TotalScore >= 0 ? 'text-win' : 'text-loss');
+    }
+
+    const p2AvgEl = document.getElementById('p2-avg-score');
+    if (p2AvgEl) p2AvgEl.textContent = '场均 ' + stats.p2AvgScore.toFixed(1);
+
+    const drawEl = document.getElementById('draws-count');
+    if (drawEl) {
+        if (stats.draws > 0) {
+            drawEl.textContent = stats.draws + ' 平';
+            drawEl.style.display = '';
+        } else {
+            drawEl.style.display = 'none';
+        }
+    }
+
+    const p1Bar = document.getElementById('vs-bar-p1');
+    const p2Bar = document.getElementById('vs-bar-p2');
+    if (p1Bar && p2Bar && stats.total > 0) {
+        const p1Pct = (stats.p1Wins / stats.total * 100).toFixed(0);
+        const p2Pct = (stats.p2Wins / stats.total * 100).toFixed(0);
+        p1Bar.style.width = p1Pct + '%';
+        p2Bar.style.width = p2Pct + '%';
+    }
+}
+
+function updateTable(filtered) {
+    const tbody = document.getElementById('games-tbody');
+    const noResults = document.getElementById('no-results');
+    const countEl = document.getElementById('filtered-count');
+
+    if (countEl) {
+        countEl.textContent = '(' + filtered.length + ' 场)';
+    }
+
+    if (!filtered.length) {
+        tbody.innerHTML = '';
+        noResults.classList.remove('d-none');
+        return;
+    }
+
+    noResults.classList.add('d-none');
+
+    const sorted = [...filtered].reverse();
+    let html = '';
+    sorted.forEach(g => {
+        const resultBadge = g.result === 'p1'
+            ? '<span class="badge bg-success">' + p1Name + ' 赢</span>'
+            : g.result === 'p2'
+            ? '<span class="badge bg-danger">' + p2Name + ' 赢</span>'
+            : '<span class="badge bg-secondary">平局</span>';
+        const p1Class = g.p1_score > 0 ? 'text-win' : 'text-loss';
+        const p2Class = g.p2_score > 0 ? 'text-win' : 'text-loss';
+        const p1Display = (g.p1_score > 0 ? '+' : '') + g.p1_score;
+        const p2Display = (g.p2_score > 0 ? '+' : '') + g.p2_score;
+        const date = new Date(g.game_time);
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const dateStr = month + '月' + day + '日 ' + hours + ':' + minutes;
+
+        html += '<tr>' +
+            '<td><a href="/games/' + g.game_id + '/" class="text-light">' + dateStr + '</a></td>' +
+            '<td class="text-center fw-bold ' + p1Class + '">' + p1Display + '</td>' +
+            '<td class="text-center fw-bold ' + p2Class + '">' + p2Display + '</td>' +
+            '<td class="text-center text-muted small">' + g.game_type_label + '</td>' +
+            '<td class="text-center">' + resultBadge + '</td>' +
+            '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function buildChartData(filtered) {
+    const labels = filtered.map(g => g.label);
+    const p1CumData = [];
+    const p2CumData = [];
+    let cum1 = 0, cum2 = 0;
+    filtered.forEach(g => {
+        cum1 += g.p1_score;
+        cum2 += g.p2_score;
+        p1CumData.push(cum1);
+        p2CumData.push(cum2);
+    });
+    const scoreDiffData = filtered.map(g => g.score_diff);
+    const p1Wins = filtered.filter(g => g.result === 'p1').length;
+    const p2Wins = filtered.filter(g => g.result === 'p2').length;
+    const draws = filtered.filter(g => g.result === 'draw').length;
+
+    return {
+        cumulative_labels: labels,
+        p1_cumulative_data: p1CumData,
+        p2_cumulative_data: p2CumData,
+        score_labels: labels,
+        score_diff_data: scoreDiffData,
+        win_pie_data: [p1Wins, p2Wins, draws],
+    };
+}
+
+function updateCharts(filtered) {
+    const data = buildChartData(filtered);
+    const total = filtered.length;
+
+    if (cumulativeChart) {
+        cumulativeChart.data.labels = data.cumulative_labels;
+        cumulativeChart.data.datasets[0].data = data.p1_cumulative_data;
+        cumulativeChart.data.datasets[1].data = data.p2_cumulative_data;
+        cumulativeChart.update();
+    }
+
+    if (winRatePieChart) {
+        winRatePieChart.data.datasets[0].data = data.win_pie_data;
+        const pieTotal = data.win_pie_data.reduce((a, b) => a + b, 0);
+        winRatePieChart.options.plugins.tooltip.callbacks.label = function(context) {
+            const val = context.parsed;
+            const pct = pieTotal > 0 ? ((val / pieTotal) * 100).toFixed(1) : 0;
+            return ' ' + context.label + ': ' + val + ' 场 (' + pct + '%)';
+        };
+        winRatePieChart.update();
+    }
+
+    if (scoreDiffChart) {
+        scoreDiffChart.data.labels = data.score_labels;
+        scoreDiffChart.data.datasets[0].data = data.score_diff_data;
+        scoreDiffChart.data.datasets[0].backgroundColor = data.score_diff_data.map(v =>
+            v > 0 ? 'rgba(201,162,39,0.75)' : (v < 0 ? 'rgba(52,152,219,0.75)' : 'rgba(108,117,125,0.6)')
+        );
+        scoreDiffChart.data.datasets[0].borderColor = data.score_diff_data.map(v =>
+            v > 0 ? P1_COLOR : (v < 0 ? P2_COLOR : DRAW_COLOR)
+        );
+        scoreDiffChart.update();
+    }
+}
+
+function applyFilters() {
+    const filtered = filterGames();
+    const stats = calculateStats(filtered);
+    updateSummary(stats);
+    updateTable(filtered);
+    updateCharts(filtered);
+}
+
+function initFilters() {
+    document.getElementById('filter-period').addEventListener('change', applyFilters);
+    document.getElementById('filter-result').addEventListener('change', applyFilters);
+    document.getElementById('filter-type').addEventListener('change', applyFilters);
+    document.getElementById('filter-reset').addEventListener('click', function() {
+        document.getElementById('filter-period').value = 'all';
+        document.getElementById('filter-result').value = 'all';
+        document.getElementById('filter-type').value = 'all';
+        applyFilters();
+    });
+}
+
 (function initCumulativeChart() {
     const ctx = document.getElementById('cumulativeChart');
     if (!ctx || !chartData.cumulative_labels.length) return;
-    new Chart(ctx, {
+    cumulativeChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: chartData.cumulative_labels,
@@ -286,7 +576,7 @@ const chartDefaults = {
     const [p1Wins, p2Wins, draws] = chartData.win_pie_data;
     const total = p1Wins + p2Wins + draws;
     if (total === 0) return;
-    new Chart(ctx, {
+    winRatePieChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: [p1Name + ' 胜', p2Name + ' 胜', '平局'],
@@ -336,7 +626,7 @@ const chartDefaults = {
     const ctx = document.getElementById('scoreDiffChart');
     if (!ctx || !chartData.score_labels.length) return;
     const diffData = chartData.score_diff_data;
-    new Chart(ctx, {
+    scoreDiffChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: chartData.score_labels,
@@ -380,6 +670,8 @@ const chartDefaults = {
         }
     });
 })();
+
+initFilters();
 {% endif %}
 </script>
 {% endblock %}
