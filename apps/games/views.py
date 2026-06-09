@@ -1452,3 +1452,256 @@ def playmate_stats(request):
         'warnings': warnings if warnings else [],
         'errors': errors if errors else [],
     })
+
+
+def highlight_popularity(request):
+    """高光人气榜数据接口
+
+    围绕 Highlight.collected_by 提供人气榜数据能力，
+    支持按收藏人数、近 N 天新增收藏、不同高光类型热度和首次出现时间输出排行榜，
+    用于支撑「高光时刻」的更多排序方式和首页推荐素材。
+
+    Query Parameters:
+        - sort_by: 排序字段
+            * total_collectors - 总收藏人数（默认）
+            * recent_collectors - 近 N 天新增收藏人数
+            * first_appeared - 首次出现时间
+            * highlight_score - 精彩评分
+        - order: 排序方向 (asc/desc)，默认 desc
+        - highlight_type: 高光类型筛选 (domination/comeback/big_win/rare_pattern/other)
+        - days: 「近 N 天」的天数，用于 recent_collectors 排序，默认 7
+        - is_featured: 是否只显示精选 (1/0)，默认 0
+        - group_by: 分组维度 (highlight/type)，默认 highlight
+            * highlight - 按单条高光排行
+            * type - 按高光类型聚合排行
+        - limit: 返回条数限制，默认 50，最大 200
+        - page: 页码，默认 1
+        - page_size: 每页数量，默认 50，最大 200
+    """
+    from django.db.models import Count, Min, Max, Q
+    from django.utils import timezone
+    from datetime import timedelta
+
+    sort_by = request.GET.get('sort_by', 'total_collectors')
+    order = request.GET.get('order', 'desc')
+    highlight_type = request.GET.get('highlight_type', '')
+    days_str = request.GET.get('days', '7')
+    is_featured_str = request.GET.get('is_featured', '0')
+    group_by = request.GET.get('group_by', 'highlight')
+    limit_str = request.GET.get('limit', '')
+    page_str = request.GET.get('page', '1')
+    page_size_str = request.GET.get('page_size', '50')
+
+    warnings = []
+    errors = []
+
+    try:
+        days = max(1, min(int(days_str), 365))
+    except (ValueError, TypeError):
+        days = 7
+        warnings.append('days 参数格式有误，已使用默认值 7')
+
+    try:
+        page = max(1, int(page_str))
+    except (ValueError, TypeError):
+        page = 1
+        warnings.append('page 参数格式有误，已使用默认值 1')
+
+    try:
+        page_size = max(1, min(int(page_size_str), 200))
+    except (ValueError, TypeError):
+        page_size = 50
+        warnings.append('page_size 参数格式有误，已使用默认值 50')
+
+    limit = None
+    if limit_str:
+        try:
+            limit = max(1, min(int(limit_str), 200))
+        except (ValueError, TypeError):
+            warnings.append('limit 参数格式有误，已忽略')
+
+    valid_sort_fields = [
+        'total_collectors', 'recent_collectors',
+        'first_appeared', 'highlight_score',
+    ]
+    if sort_by not in valid_sort_fields:
+        sort_by = 'total_collectors'
+        warnings.append(
+            f'sort_by 参数无效，有效值为 {", ".join(valid_sort_fields)}，已使用默认值 total_collectors'
+        )
+
+    if order not in ('asc', 'desc'):
+        order = 'desc'
+        warnings.append('order 参数无效，有效值为 asc/desc，已使用默认值 desc')
+
+    if group_by not in ('highlight', 'type'):
+        group_by = 'highlight'
+        warnings.append('group_by 参数无效，有效值为 highlight/type，已使用默认值 highlight')
+
+    recent_cutoff = timezone.now() - timedelta(days=days)
+
+    qs = Highlight.objects.select_related('winner', 'game').prefetch_related(
+        'game__players__user'
+    ).filter(
+        game__status='completed'
+    )
+
+    if highlight_type:
+        valid_types = [t[0] for t in Highlight.HIGHLIGHT_TYPE_CHOICES]
+        if highlight_type in valid_types:
+            qs = qs.filter(highlight_type=highlight_type)
+        else:
+            warnings.append(
+                f'highlight_type 参数无效，有效值为 {", ".join(valid_types)}，已忽略'
+            )
+
+    if is_featured_str == '1':
+        qs = qs.filter(is_featured=True)
+    elif is_featured_str == '0':
+        pass
+    else:
+        warnings.append('is_featured 参数无效，有效值为 0/1，已忽略')
+
+    if group_by == 'highlight':
+        total_count = qs.count()
+        results = _get_highlight_popularity_list(
+            qs, sort_by, order, recent_cutoff, page, page_size, limit
+        )
+        if limit:
+            has_more = False
+            page_size = limit
+        else:
+            has_more = (page * page_size) < total_count
+    else:
+        results = _get_highlight_type_popularity(
+            qs, sort_by, order, recent_cutoff
+        )
+        total_count = len(results)
+        has_more = False
+        page = 1
+        page_size = total_count
+
+    return JsonResponse({
+        'group_by': group_by,
+        'sort_by': sort_by,
+        'order': order,
+        'results': results,
+        'total': total_count,
+        'page': page,
+        'page_size': page_size,
+        'has_more': has_more,
+        'filters': {
+            'highlight_type': highlight_type or None,
+            'days': days,
+            'is_featured': is_featured_str == '1',
+        },
+        'warnings': warnings if warnings else [],
+        'errors': errors if errors else [],
+    })
+
+
+def _get_highlight_popularity_list(qs, sort_by, order, recent_cutoff, page, page_size, limit):
+    """按单条高光排行"""
+    from django.db.models import Count, Min, Q
+
+    qs = qs.annotate(
+        total_collectors=Count('collected_by', distinct=True),
+        recent_collectors=Count(
+            'collected_by',
+            filter=Q(collections__created_at__gte=recent_cutoff),
+            distinct=True
+        ),
+        first_appeared=Min('game__game_time'),
+    )
+
+    sort_map = {
+        'total_collectors': 'total_collectors',
+        'recent_collectors': 'recent_collectors',
+        'first_appeared': 'first_appeared',
+        'highlight_score': 'highlight_score',
+    }
+    sort_field = sort_map.get(sort_by, 'total_collectors')
+    order_prefix = '' if order == 'asc' else '-'
+
+    secondary_sort = '-highlight_score' if order == 'desc' else 'highlight_score'
+    qs = qs.order_by(f'{order_prefix}{sort_field}', secondary_sort, '-created_at')
+
+    if limit:
+        qs = qs[:limit]
+    else:
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        qs = qs[start_idx:end_idx]
+
+    results = []
+    for h in qs:
+        results.append({
+            'highlight_id': h.pk,
+            'title': h.get_display_title(),
+            'highlight_type': h.highlight_type,
+            'highlight_type_name': h.get_highlight_type_display(),
+            'highlight_score': h.highlight_score,
+            'is_featured': h.is_featured,
+            'is_pinned': h.is_pinned,
+            'total_collectors': h.total_collectors,
+            'recent_collectors': h.recent_collectors,
+            'first_appeared': h.first_appeared.isoformat() if h.first_appeared else None,
+            'created_at': h.created_at.isoformat() if h.created_at else None,
+            'winner_id': h.winner_id,
+            'winner_name': h.winner.get_display_name(),
+            'game_id': h.game_id,
+            'game_time': h.game.game_time.isoformat() if h.game and h.game.game_time else None,
+        })
+
+    return results
+
+
+def _get_highlight_type_popularity(qs, sort_by, order, recent_cutoff):
+    """按高光类型聚合排行"""
+    from django.db.models import Count, Min, Q, Avg, Max
+
+    type_stats = qs.values('highlight_type').annotate(
+        highlight_count=Count('id'),
+        total_collectors=Count('collected_by', distinct=True),
+        recent_collectors=Count(
+            'collected_by',
+            filter=Q(collections__created_at__gte=recent_cutoff),
+            distinct=True
+        ),
+        avg_highlight_score=Avg('highlight_score'),
+        max_highlight_score=Max('highlight_score'),
+        first_appeared=Min('game__game_time'),
+        total_featured=Count('id', filter=Q(is_featured=True)),
+    )
+
+    sort_map = {
+        'total_collectors': 'total_collectors',
+        'recent_collectors': 'recent_collectors',
+        'first_appeared': 'first_appeared',
+        'highlight_score': 'avg_highlight_score',
+        'highlight_count': 'highlight_count',
+    }
+    sort_field = sort_map.get(sort_by, 'total_collectors')
+    if sort_by == 'highlight_score':
+        sort_field = 'avg_highlight_score'
+
+    order_prefix = '' if order == 'asc' else '-'
+    type_stats = type_stats.order_by(f'{order_prefix}{sort_field}')
+
+    results = []
+    type_choices = dict(Highlight.HIGHLIGHT_TYPE_CHOICES)
+    for stat in type_stats:
+        h_type = stat['highlight_type']
+        results.append({
+            'highlight_type': h_type,
+            'highlight_type_name': type_choices.get(h_type, h_type),
+            'highlight_count': stat['highlight_count'],
+            'total_collectors': stat['total_collectors'],
+            'recent_collectors': stat['recent_collectors'],
+            'avg_highlight_score': round(stat['avg_highlight_score'] or 0, 1),
+            'max_highlight_score': stat['max_highlight_score'] or 0,
+            'first_appeared': stat['first_appeared'].isoformat() if stat['first_appeared'] else None,
+            'total_featured': stat['total_featured'],
+        })
+
+    return results
