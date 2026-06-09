@@ -16,5 +16,6 @@ urlpatterns = [
     path('<int:pk>/scoreboard/record/', views.record_round, name='record_round'),
     path('<int:pk>/scoreboard/api/', views.scoreboard_api, name='scoreboard_api'),
     path('<int:pk>/scoreboard/end/', views.end_scoreboard, name='end_scoreboard'),
+    path('<int:pk>/stats/', views.stats_summary_api, name='stats_summary'),
     path('join-by-code/', views.join_by_code, name='join_by_code'),
 ]

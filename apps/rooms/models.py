@@ -190,6 +190,88 @@ class Room(models.Model):
             'round_history': round_history,
         }
 
+    def get_stats_summary(self):
+        from django.db.models import Count, Sum, Max
+        from apps.games.models import Game, GamePlayer
+
+        completed_games = Game.objects.filter(room=self, status='completed')
+        total_games = completed_games.count()
+
+        if total_games == 0:
+            return {
+                'total_games': 0,
+                'total_rounds': 0,
+                'host_win_rate': 0.0,
+                'host_wins': 0,
+                'host_games': 0,
+                'total_amount': 0,
+                'last_active_at': None,
+                'regular_players': [],
+                'top_winners': [],
+            }
+
+        last_game = completed_games.order_by('-game_time').first()
+        last_active_at = last_game.game_time if last_game else None
+
+        from apps.games.models import GameSnapshot
+        total_rounds = GameSnapshot.objects.filter(
+            game__room=self, game__status='completed'
+        ).values('game', 'round_number').distinct().count()
+
+        host_games = GamePlayer.objects.filter(
+            game__room=self, game__status='completed', user=self.host
+        ).count()
+        host_wins = GamePlayer.objects.filter(
+            game__room=self, game__status='completed', user=self.host, is_winner=True
+        ).count()
+        host_win_rate = (host_wins / host_games * 100) if host_games > 0 else 0.0
+
+        total_amount = GamePlayer.objects.filter(
+            game__room=self, game__status='completed', score__gt=0
+        ).aggregate(total=Sum('score'))['total'] or 0
+
+        player_stats = GamePlayer.objects.filter(
+            game__room=self, game__status='completed'
+        ).values('user').annotate(
+            games_played=Count('game'),
+            total_score=Sum('score'),
+            wins=Count('game', filter=models.Q(is_winner=True)),
+        ).order_by('-games_played')
+
+        regular_players = []
+        for ps in player_stats[:5]:
+            user = self.members.filter(user_id=ps['user']).first()
+            if not user:
+                from apps.accounts.models import User
+                try:
+                    user_obj = User.objects.get(pk=ps['user'])
+                except Exception:
+                    continue
+            else:
+                user_obj = user.user
+
+            regular_players.append({
+                'player': user_obj,
+                'games_played': ps['games_played'],
+                'total_score': ps['total_score'] or 0,
+                'wins': ps['wins'],
+                'win_rate': (ps['wins'] / ps['games_played'] * 100) if ps['games_played'] > 0 else 0.0,
+            })
+
+        top_winners = sorted(regular_players, key=lambda p: p['total_score'], reverse=True)[:3]
+
+        return {
+            'total_games': total_games,
+            'total_rounds': total_rounds,
+            'host_win_rate': round(host_win_rate, 2),
+            'host_wins': host_wins,
+            'host_games': host_games,
+            'total_amount': total_amount,
+            'last_active_at': last_active_at,
+            'regular_players': regular_players,
+            'top_winners': top_winners,
+        }
+
 
 class RoomMember(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='members', verbose_name='房间')

@@ -433,3 +433,46 @@ def serialize_scoreboard(scoreboard):
             for h in scoreboard['round_history']
         ],
     }
+
+
+def stats_summary_api(request, pk):
+    room = get_object_or_404(Room, pk=pk)
+    stats = room.get_stats_summary()
+    return JsonResponse({
+        'status': 'ok',
+        'stats': serialize_stats_summary(stats),
+    })
+
+
+def serialize_stats_summary(stats):
+    return {
+        'total_games': stats['total_games'],
+        'total_rounds': stats['total_rounds'],
+        'host_win_rate': stats['host_win_rate'],
+        'host_wins': stats['host_wins'],
+        'host_games': stats['host_games'],
+        'total_amount': stats['total_amount'],
+        'last_active_at': stats['last_active_at'].isoformat() if stats['last_active_at'] else None,
+        'regular_players': [
+            {
+                'player_id': p['player'].pk,
+                'player_name': p['player'].get_display_name(),
+                'player_avatar': p['player'].get_avatar_url(),
+                'games_played': p['games_played'],
+                'total_score': p['total_score'],
+                'wins': p['wins'],
+                'win_rate': round(p['win_rate'], 2),
+            }
+            for p in stats['regular_players']
+        ],
+        'top_winners': [
+            {
+                'player_id': p['player'].pk,
+                'player_name': p['player'].get_display_name(),
+                'player_avatar': p['player'].get_avatar_url(),
+                'total_score': p['total_score'],
+                'games_played': p['games_played'],
+            }
+            for p in stats['top_winners']
+        ],
+    }
