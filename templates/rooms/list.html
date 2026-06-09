@@ -12,6 +12,76 @@
         </div>
     </div>
 
+    <!-- Filter Bar -->
+    <div class="card-dark mb-4">
+        <div class="card-body-dark py-3">
+            <form id="filterForm" method="get" class="d-flex flex-wrap gap-3 align-items-end">
+                <div class="filter-group">
+                    <label class="form-label mb-1"><i class="bi bi-funnel"></i> 状态</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button"
+                            class="btn btn-sm {% if not status %}btn-gold{% else %}btn-outline-gold{% endif %}"
+                            onclick="setFilter('status', '')">
+                            全部
+                        </button>
+                        {% for key, label in status_choices %}
+                        <button type="button"
+                            class="btn btn-sm {% if status == key %}btn-gold{% else %}btn-outline-gold{% endif %}"
+                            onclick="setFilter('status', '{{ key }}')">
+                            {{ label }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label class="form-label mb-1"><i class="bi bi-joystick"></i> 玩法</label>
+                    <select name="game_type" class="form-select form-select-sm" style="min-width: 140px;" onchange="submitFilter()">
+                        <option value="">全部玩法</option>
+                        {% for key, label in game_type_choices %}
+                        <option value="{{ key }}" {% if game_type == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="form-label mb-1"><i class="bi bi-person-plus"></i> 空位</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button"
+                            class="btn btn-sm {% if not seats %}btn-gold{% else %}btn-outline-gold{% endif %}"
+                            onclick="setFilter('seats', '')">
+                            全部
+                        </button>
+                        <button type="button"
+                            class="btn btn-sm {% if seats == 'has_seat' %}btn-gold{% else %}btn-outline-gold{% endif %}"
+                            onclick="setFilter('seats', 'has_seat')">
+                            有空位
+                        </button>
+                        <button type="button"
+                            class="btn btn-sm {% if seats == 'few_seats' %}btn-gold{% else %}btn-outline-gold{% endif %}"
+                            onclick="setFilter('seats', 'few_seats')">
+                            快满了
+                        </button>
+                        <button type="button"
+                            class="btn btn-sm {% if seats == 'one_seat' %}btn-gold{% else %}btn-outline-gold{% endif %}"
+                            onclick="setFilter('seats', 'one_seat')">
+                            仅剩1位
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ms-auto">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">
+                        <i class="bi bi-x-circle"></i> 重置筛选
+                    </button>
+                </div>
+
+                <input type="hidden" name="status" value="{{ status }}">
+                <input type="hidden" name="seats" value="{{ seats }}">
+            </form>
+        </div>
+    </div>
+
     <!-- Join by code -->
     {% if user.is_authenticated %}
     <div class="card-dark mb-4">
@@ -27,11 +97,18 @@
     </div>
     {% endif %}
 
+    <!-- Room Count -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <span class="text-muted small">
+            <i class="bi bi-list-ul"></i> 共 <strong class="text-gold">{{ rooms|length }}</strong> 个房间
+        </span>
+    </div>
+
     <!-- Room List -->
     <div class="row g-3">
         {% for room in rooms %}
         <div class="col-md-6 col-lg-4">
-            <div class="room-card h-100 p-3">
+            <div class="room-card h-100 p-3 {% if room.is_full %}room-full{% elif room.remaining_seats <= 1 %}room-almost-full{% endif %}">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <h6 class="text-light mb-0">{{ room.name }}</h6>
                     <span class="badge {% if room.status == 'waiting' %}bg-success{% elif room.status == 'playing' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
@@ -47,17 +124,46 @@
                     <i class="bi bi-coin"></i> {{ room.base_score }}元/分
                 </div>
 
-                <div class="d-flex align-items-center gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2 mb-3">
                     <img src="{{ room.host.get_avatar_url }}" class="mini-avatar">
                     <span class="text-muted small">房主: {{ room.host.get_display_name }}</span>
                 </div>
 
-                <div class="d-flex align-items-center justify-content-between">
-                    <div class="text-muted small">
-                        <i class="bi bi-people"></i>
-                        {{ room.get_player_count }} / {{ room.max_players }} 人
+                <!-- Seat Progress Bar -->
+                <div class="seat-info mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">
+                            <i class="bi bi-people"></i>
+                            {{ room.player_count }} / {{ room.max_players }} 人
+                        </span>
+                        {% if room.is_full %}
+                        <span class="seat-badge seat-full">已满</span>
+                        {% elif room.remaining_seats == 1 %}
+                        <span class="seat-badge seat-urgent">仅剩1位</span>
+                        {% elif room.remaining_seats <= 2 %}
+                        <span class="seat-badge seat-warning">快满了</span>
+                        {% else %}
+                        <span class="seat-badge seat-available">有空位</span>
+                        {% endif %}
                     </div>
-                    <a href="/rooms/{{ room.pk }}/" class="btn btn-sm btn-outline-gold">进入房间</a>
+                    <div class="seat-progress">
+                        <div class="seat-progress-bar {% if room.is_full %}seat-bar-full{% elif room.remaining_seats <= 1 %}seat-bar-urgent{% elif room.remaining_seats <= 2 %}seat-bar-warning{% else %}seat-bar-available{% endif %}"
+                             style="width: {% widthratio room.player_count room.max_players 100 %}%">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="seat-indicators">
+                        {% for i in room.seat_list %}
+                        <span class="seat-dot {% if forloop.counter <= room.player_count %}seat-dot-filled{% endif %}"></span>
+                        {% endfor %}
+                    </div>
+                    <a href="/rooms/{{ room.pk }}/"
+                       class="btn btn-sm {% if room.is_full %}btn-secondary disabled{% else %}btn-outline-gold{% endif %}"
+                       {% if room.is_full %}aria-disabled="true"{% endif %}>
+                        {% if room.is_full %}已满{% else %}进入房间{% endif %}
+                    </a>
                 </div>
             </div>
         </div>
@@ -65,7 +171,7 @@
         <div class="col-12">
             <div class="text-center py-5 text-muted">
                 <i class="bi bi-door-closed fs-1"></i>
-                <p class="mt-3">暂无开放中的房间</p>
+                <p class="mt-3">暂无符合条件的房间</p>
                 {% if user.is_authenticated %}
                 <a href="/rooms/create/" class="btn btn-gold mt-2">
                     <i class="bi bi-plus-circle"></i> 创建第一个房间
@@ -73,9 +179,33 @@
                 {% else %}
                 <a href="/accounts/login/" class="btn btn-outline-gold mt-2">登录后创建房间</a>
                 {% endif %}
+                {% if status or game_type or seats %}
+                <button type="button" class="btn btn-outline-secondary mt-2 ms-2" onclick="resetFilters()">
+                    <i class="bi bi-arrow-counterclockwise"></i> 重置筛选条件
+                </button>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
     </div>
 </div>
+
+<script>
+function setFilter(name, value) {
+    const form = document.getElementById('filterForm');
+    const input = form.querySelector(`input[name="${name}"]`);
+    if (input) {
+        input.value = value;
+    }
+    submitFilter();
+}
+
+function submitFilter() {
+    document.getElementById('filterForm').submit();
+}
+
+function resetFilters() {
+    window.location.href = '/rooms/';
+}
+</script>
 {% endblock %}

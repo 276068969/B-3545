@@ -12,8 +12,39 @@ import json
 
 
 def room_list(request):
+    status = request.GET.get('status', '')
+    game_type = request.GET.get('game_type', '')
+    seats = request.GET.get('seats', '')
+
     rooms = Room.objects.filter(status__in=['waiting', 'playing']).select_related('host').prefetch_related('members')
-    context = {'rooms': rooms}
+
+    if status and status in ['waiting', 'playing']:
+        rooms = rooms.filter(status=status)
+
+    if game_type and game_type in dict(Room.GAME_TYPE_CHOICES):
+        rooms = rooms.filter(game_type=game_type)
+
+    room_list = list(rooms)
+    for room in room_list:
+        room.player_count = room.get_player_count()
+        room.remaining_seats = room.max_players - room.player_count
+        room.seat_list = range(room.max_players)
+
+    if seats == 'has_seat':
+        room_list = [r for r in room_list if r.remaining_seats > 0]
+    elif seats == 'one_seat':
+        room_list = [r for r in room_list if r.remaining_seats == 1]
+    elif seats == 'few_seats':
+        room_list = [r for r in room_list if 0 < r.remaining_seats <= 2]
+
+    context = {
+        'rooms': room_list,
+        'status': status,
+        'game_type': game_type,
+        'seats': seats,
+        'game_type_choices': Room.GAME_TYPE_CHOICES,
+        'status_choices': Room.STATUS_CHOICES[:2],
+    }
     return render(request, 'rooms/list.html', context)
 
 
